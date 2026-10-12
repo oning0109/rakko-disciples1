@@ -47,8 +47,8 @@ export default function App() {
   }
 
   // 3. 게시글 작성하기
- // src/App.jsx 내 handleCreatePost 함수 수정
-const handleCreatePost = async (e) => {
+ 
+  const handleCreatePost = async (e) => {
   e.preventDefault()
   if (!session) {
     alert('로그인이 필요한 기능입니다!')
