@@ -126,6 +126,56 @@ export default function App() {
     }
   }
 
+  // 6. 잡초 뽑기 (팀 검증 + 팝업 없음 + 2pt 반영)
+  const handleWeeding = async () => {
+    if (!session) {
+      alert('로그인이 필요한 수련입니다!')
+      return
+    }
+
+    try {
+      // 로그인 유저의 소속 팀 조회
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('team_id')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+
+      if (!profile || !profile.team_id) {
+        alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.\n디스코드 서버에서 먼저 종족 역할을 부여받아 주세요!')
+        return
+      }
+
+      const targetTeam = profile.team_id
+
+      const { data: teamData } = await supabase
+        .from('team_scores')
+        .select('total_points')
+        .eq('team_id', targetTeam)
+        .maybeSingle()
+
+      if (!teamData) {
+        alert('해당 팀의 점수 데이터를 찾을 수 없습니다.')
+        return
+      }
+
+      const currentPoints = teamData.total_points || 0
+      const newPoints = currentPoints + 2
+
+      const { error: updateError } = await supabase
+        .from('team_scores')
+        .update({ total_points: newPoints })
+        .eq('team_id', targetTeam)
+
+      if (!updateError) {
+        setUserPoints((prev) => prev + 2)
+        fetchTeamScores()
+      }
+    } catch (err) {
+      console.error('제초 처리 중 오류 발생:', err)
+    }
+  }
+
   const handleDiscordLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'discord',
@@ -138,41 +188,6 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
   }
-
-  const handleWeeding = async () => {
-  if (!session) {
-    alert('로그인이 필요한 수련입니다!')
-    return
-  }
-
-  // 1. 치이카와 족(또는 기본 팀)의 현재 포인트 불러오기
-  const targetTeam = 'chiikawa' // 테스트용 기본 팀
-  const { data, error: selectError } = await supabase
-    .from('team_scores')
-    .select('total_points')
-    .eq('team_id', targetTeam)
-    .single()
-
-  if (selectError) {
-    alert('포인트 반영 실패: ' + selectError.message)
-    return
-  }
-
-  // 2. Supabase DB에 +10 포인트 누적 저장
-  const newPoints = (data.total_points || 0) + 5
-  const { error: updateError } = await supabase
-    .from('team_scores')
-    .update({ total_points: newPoints })
-    .eq('team_id', targetTeam)
-
-  if (!updateError) {
-    setUserPoints((prev) => prev + 5)
-    fetchTeamScores() // 웹사이트 리더보드 실시간 갱신!
-    alert('🌱 잡초를 뽑아 소속 팀에 +5 pt가 누적되었습니다!')
-  } else {
-    alert('업데이트 에러: ' + updateError.message)
-  }
-}
 
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '32px 20px' }}>
@@ -275,7 +290,7 @@ export default function App() {
             </p>
           </div>
           <button onClick={handleWeeding} className="btn-weed">
-            <Flame size={18} /> 잡초 뽑기 (+10 pt)
+            <Flame size={18} /> 잡초 뽑기 (+2 pt)
           </button>
         </div>
 
