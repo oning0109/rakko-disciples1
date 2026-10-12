@@ -19,43 +19,53 @@ export default function App() {
   // =========================================================
   useEffect(() => {
     const syncUserProfile = async (currentSession) => {
-  if (!currentSession?.user) return
+      if (!currentSession?.user) return
 
-  const user = currentSession.user
-  const discordId = user.user_metadata?.provider_id || user.user_metadata?.sub || ''
-  const username = user.user_metadata?.full_name || user.user_metadata?.name || '익명'
-  const avatarUrl = user.user_metadata?.avatar_url || ''
+      const user = currentSession.user
+      const discordId = user.user_metadata?.provider_id || user.user_metadata?.sub || ''
+      const username = user.user_metadata?.full_name || user.user_metadata?.name || '익명'
+      const avatarUrl = user.user_metadata?.avatar_url || ''
 
-  if (!discordId) return
+      if (!discordId) return
 
-  // 1. discord_id 기준으로 기존 프로필 조회
-  const { data: existingProfile } = await supabase
-    .from('user_profiles')
-    .select('*')
-    .eq('discord_id', discordId)
-    .maybeSingle()
+      try {
+        // 1. discord_id 기준으로 기존 프로필 안전하게 조회 (.maybeSingle 대신 배열 처리)
+        const { data: profiles, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('discord_id', discordId)
 
-  if (existingProfile) {
-    // 2. 봇이 미리 만들어둔 행(user_id가 UUID 형태가 아닌 경우)이 있다면 user_id를 웹 UUID로 변경(통합)
-    if (existingProfile.user_id !== user.id) {
-      await supabase.from('user_profiles').update({
-        user_id: user.id,
-        username: username,
-        avatar_url: avatarUrl
-      }).eq('discord_id', discordId)
+        if (error) {
+          console.error('프로필 조회 실패:', error.message)
+          return
+        }
+
+        const existingProfile = profiles && profiles.length > 0 ? profiles[0] : null
+
+        if (existingProfile) {
+          // 2. 봇이 미리 만든 행이 있다면 user_id를 웹 UUID로 업데이트
+          if (existingProfile.user_id !== user.id) {
+            await supabase.from('user_profiles').update({
+              user_id: user.id,
+              username: username,
+              avatar_url: avatarUrl
+            }).eq('discord_id', discordId)
+          }
+        } else {
+          // 3. 기록이 없던 웹 신규 유저 프로필 신규 생성
+          await supabase.from('user_profiles').insert({
+            user_id: user.id,
+            discord_id: discordId,
+            username: username,
+            avatar_url: avatarUrl,
+            points: 0,
+            chat_count: 0
+          })
+        }
+      } catch (err) {
+        console.error('프로필 동기화 중 예외 발생:', err)
+      }
     }
-  } else {
-    // 3. 기록이 없던 웹 신규 유저 프로필 신규 생성
-    await supabase.from('user_profiles').insert({
-      user_id: user.id,
-      discord_id: discordId,
-      username: username,
-      avatar_url: avatarUrl,
-      points: 0,
-      chat_count: 0
-    })
-  }
-}
 
     // 초기 세션 정보 확인
     supabase.auth.getSession().then(({ data: { session: initSession } }) => {
@@ -183,7 +193,6 @@ export default function App() {
     try {
       const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
 
-      // 로그인 유저의 소속 팀 조회 (user_id 또는 discord_id)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('team_id')
