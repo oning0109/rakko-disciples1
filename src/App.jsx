@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2 } from 'lucide-react'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -92,7 +92,29 @@ export default function App() {
     }
   }
 
-  // 4. 게시글 좋아요
+  // 4. 게시글 삭제하기
+  const handleDeletePost = async (postId, postUserId) => {
+    if (!session) return
+    if (session.user.id !== postUserId) {
+      alert('본인이 작성한 글만 삭제할 수 있습니다.')
+      return
+    }
+
+    if (!window.confirm('정말 이 게시글을 삭제하시겠습니까?')) return
+
+    const { error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', postId)
+
+    if (error) {
+      alert('삭제 중 오류가 발생했습니다: ' + error.message)
+    } else {
+      fetchPosts()
+    }
+  }
+
+  // 5. 게시글 좋아요
   const handleLikePost = async (postId, currentLikes) => {
     const { error } = await supabase
       .from('posts')
@@ -303,13 +325,28 @@ export default function App() {
                     </span>
                     <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>{post.title}</h3>
                   </div>
-                  <button 
-                    onClick={() => handleLikePost(post.id, post.likes)}
-                    style={{ border: 'none', background: '#fff0f3', color: '#e11d48', padding: '4px 10px', borderRadius: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: '600' }}
-                  >
-                    <Heart size={14} fill="#e11d48" /> {post.likes || 0}
-                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      onClick={() => handleLikePost(post.id, post.likes)}
+                      style={{ border: 'none', background: '#fff0f3', color: '#e11d48', padding: '4px 10px', borderRadius: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: '600' }}
+                    >
+                      <Heart size={14} fill="#e11d48" /> {post.likes || 0}
+                    </button>
+
+                    {/* 작성자 본인에게만 삭제 버튼 표시 */}
+                    {session && session.user.id === post.user_id && (
+                      <button 
+                        onClick={() => handleDeletePost(post.id, post.user_id)}
+                        style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                        title="게시글 삭제"
+                      >
+                        <Trash2 size={14} /> 삭제
+                      </button>
+                    )}
+                  </div>
                 </div>
+
                 <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
                   {post.content}
                 </p>
