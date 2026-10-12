@@ -97,8 +97,13 @@ export default function App() {
   }
 
   const handleDiscordLogin = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'discord' })
-  }
+  await supabase.auth.signInWithOAuth({
+    provider: 'discord',
+    options: {
+      redirectTo: window.location.origin, // 접속 중인 주소(Vercel 또는 localhost)로 자동 지정
+    },
+  })
+}
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
