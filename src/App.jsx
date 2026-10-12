@@ -19,38 +19,43 @@ export default function App() {
   // =========================================================
   useEffect(() => {
     const syncUserProfile = async (currentSession) => {
-      if (!currentSession?.user) return
+  if (!currentSession?.user) return
 
-      const user = currentSession.user
-      const discordId = user.user_metadata?.provider_id || user.user_metadata?.sub || ''
-      const username = user.user_metadata?.full_name || user.user_metadata?.name || '익명'
-      const avatarUrl = user.user_metadata?.avatar_url || ''
+  const user = currentSession.user
+  const discordId = user.user_metadata?.provider_id || user.user_metadata?.sub || ''
+  const username = user.user_metadata?.full_name || user.user_metadata?.name || '익명'
+  const avatarUrl = user.user_metadata?.avatar_url || ''
 
-      // 1. 기존 user_profiles에 유저가 있는지 조회 (user_id 또는 discord_id)
-      const { data: existingProfile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
-        .maybeSingle()
+  if (!discordId) return
 
-      if (!existingProfile) {
-        // 2. DB에 기록이 없는 웹 신규 유저인 경우 프로필 추가
-        await supabase.from('user_profiles').insert({
-          user_id: user.id,
-          discord_id: discordId,
-          username: username,
-          avatar_url: avatarUrl,
-          points: 0,
-          chat_count: 0
-        })
-      } else if (!existingProfile.discord_id && discordId) {
-        // 3. 디스코드 봇이 미리 생성해둔 데이터가 있는 경우 discord_id 및 정보 연결
-        await supabase.from('user_profiles').update({
-          discord_id: discordId,
-          avatar_url: avatarUrl
-        }).eq('user_id', existingProfile.user_id)
-      }
+  // 1. discord_id 기준으로 기존 프로필 조회
+  const { data: existingProfile } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('discord_id', discordId)
+    .maybeSingle()
+
+  if (existingProfile) {
+    // 2. 봇이 미리 만들어둔 행(user_id가 UUID 형태가 아닌 경우)이 있다면 user_id를 웹 UUID로 변경(통합)
+    if (existingProfile.user_id !== user.id) {
+      await supabase.from('user_profiles').update({
+        user_id: user.id,
+        username: username,
+        avatar_url: avatarUrl
+      }).eq('discord_id', discordId)
     }
+  } else {
+    // 3. 기록이 없던 웹 신규 유저 프로필 신규 생성
+    await supabase.from('user_profiles').insert({
+      user_id: user.id,
+      discord_id: discordId,
+      username: username,
+      avatar_url: avatarUrl,
+      points: 0,
+      chat_count: 0
+    })
+  }
+}
 
     // 초기 세션 정보 확인
     supabase.auth.getSession().then(({ data: { session: initSession } }) => {
