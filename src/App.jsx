@@ -46,57 +46,29 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 3. 게시글 작성하기
- 
+  // 3. 게시글 작성하기 (외래키 오류 방지)
   const handleCreatePost = async (e) => {
-  e.preventDefault()
-  if (!session) {
-    alert('로그인이 필요한 기능입니다!')
-    return
-  }
-  if (!newTitle.trim() || !newContent.trim()) {
-    alert('제목과 내용을 모두 입력해 주세요.')
-    return
-  }
-
-  setIsSubmitting(true)
-  const authorName = session.user.user_metadata.full_name || session.user.user_metadata.name || '무명 제자'
-  const userId = session.user.id
-  const avatarUrl = session.user.user_metadata.avatar_url || ''
-
-  // 1. 유저 프로필 데이터 먼저 생성/갱신 (외래키 오류 방지)
-  await supabase.from('user_profiles').upsert({
-    user_id: userId,
-    username: authorName,
-    avatar_url: avatarUrl,
-  })
-
-  // 2. 게시글 작성 진행
-  const { error } = await supabase.from('posts').insert([
-    {
-      user_id: userId,
-      author_name: authorName,
-      team_id: 'chiikawa',
-      category: newCategory,
-      title: newTitle.trim(),
-      content: newContent.trim(),
+    e.preventDefault()
+    if (!session) {
+      alert('로그인이 필요한 기능입니다!')
+      return
     }
-  ])
-
-  setIsSubmitting(false)
-
-  if (error) {
-    alert('글 작성 중 오류가 발생했습니다: ' + error.message)
-  } else {
-    setNewTitle('')
-    setNewContent('')
-    fetchPosts()
-  }
-}
+    if (!newTitle.trim() || !newContent.trim()) {
+      alert('제목과 내용을 모두 입력해 주세요.')
+      return
+    }
 
     setIsSubmitting(true)
     const authorName = session.user.user_metadata.full_name || session.user.user_metadata.name || '무명 제자'
     const userId = session.user.id
+    const avatarUrl = session.user.user_metadata.avatar_url || ''
+
+    // 유저 프로필 자동 생성/갱신
+    await supabase.from('user_profiles').upsert({
+      user_id: userId,
+      username: authorName,
+      avatar_url: avatarUrl,
+    })
 
     const { error } = await supabase.from('posts').insert([
       {
@@ -133,13 +105,13 @@ export default function App() {
   }
 
   const handleDiscordLogin = async () => {
-  await supabase.auth.signInWithOAuth({
-    provider: 'discord',
-    options: {
-      redirectTo: window.location.origin, // 접속 중인 주소(Vercel 또는 localhost)로 자동 지정
-    },
-  })
-}
+    await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
