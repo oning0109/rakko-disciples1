@@ -140,12 +140,39 @@ export default function App() {
   }
 
   const handleWeeding = async () => {
-    if (!session) {
-      alert('로그인이 필요한 수련입니다!')
-      return
-    }
-    setUserPoints((prev) => prev + 10)
+  if (!session) {
+    alert('로그인이 필요한 수련입니다!')
+    return
   }
+
+  // 1. 치이카와 족(또는 기본 팀)의 현재 포인트 불러오기
+  const targetTeam = 'chiikawa' // 테스트용 기본 팀
+  const { data, error: selectError } = await supabase
+    .from('team_scores')
+    .select('total_points')
+    .eq('team_id', targetTeam)
+    .single()
+
+  if (selectError) {
+    alert('포인트 반영 실패: ' + selectError.message)
+    return
+  }
+
+  // 2. Supabase DB에 +10 포인트 누적 저장
+  const newPoints = (data.total_points || 0) + 5
+  const { error: updateError } = await supabase
+    .from('team_scores')
+    .update({ total_points: newPoints })
+    .eq('team_id', targetTeam)
+
+  if (!updateError) {
+    setUserPoints((prev) => prev + 5)
+    fetchTeamScores() // 웹사이트 리더보드 실시간 갱신!
+    alert('🌱 잡초를 뽑아 소속 팀에 +5 pt가 누적되었습니다!')
+  } else {
+    alert('업데이트 에러: ' + updateError.message)
+  }
+}
 
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '32px 20px' }}>
