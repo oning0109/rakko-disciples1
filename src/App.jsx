@@ -14,17 +14,59 @@ export default function App() {
   const [newCategory, setNewCategory] = useState('자유')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // =========================================================
+  // 로그인 세션 감지 및 user_profiles 테이블 실시간 프로필 동기화
+  // =========================================================
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
+    const syncUserProfile = async (currentSession) => {
+      if (!currentSession?.user) return
+
+      const user = currentSession.user
+      const discordId = user.user_metadata?.provider_id || user.user_metadata?.sub || ''
+      const username = user.user_metadata?.full_name || user.user_metadata?.name || '익명'
+      const avatarUrl = user.user_metadata?.avatar_url || ''
+
+      // 1. 기존 user_profiles에 유저가 있는지 조회 (user_id 또는 discord_id)
+      const { data: existingProfile } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
+        .maybeSingle()
+
+      if (!existingProfile) {
+        // 2. DB에 기록이 없는 웹 신규 유저인 경우 프로필 추가
+        await supabase.from('user_profiles').insert({
+          user_id: user.id,
+          discord_id: discordId,
+          username: username,
+          avatar_url: avatarUrl,
+          points: 0,
+          chat_count: 0
+        })
+      } else if (!existingProfile.discord_id && discordId) {
+        // 3. 디스코드 봇이 미리 생성해둔 데이터가 있는 경우 discord_id 및 정보 연결
+        await supabase.from('user_profiles').update({
+          discord_id: discordId,
+          avatar_url: avatarUrl
+        }).eq('user_id', existingProfile.user_id)
+      }
+    }
+
+    // 초기 세션 정보 확인
+    supabase.auth.getSession().then(({ data: { session: initSession } }) => {
+      setSession(initSession)
+      if (initSession) syncUserProfile(initSession)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+    // 세션 변경 감지
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession)
+      if (newSession) syncUserProfile(newSession)
     })
 
     fetchTeamScores()
     fetchPosts()
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -46,7 +88,7 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 3. 게시글 작성하기 (외래키 오류 방지)
+  // 3. 게시글 작성하기
   const handleCreatePost = async (e) => {
     e.preventDefault()
     if (!session) {
@@ -68,7 +110,7 @@ export default function App() {
       user_id: userId,
       username: authorName,
       avatar_url: avatarUrl,
-    })
+    }, { onConflict: 'user_id' })
 
     const { error } = await supabase.from('posts').insert([
       {
@@ -126,7 +168,7 @@ export default function App() {
     }
   }
 
-  // 6. 잡초 뽑기 (팀 검증 + 팝업 없음 + 2pt 반영)
+  // 6. 잡초 뽑기 (user_id 및 discord_id 모두 교차 검증)
   const handleWeeding = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -134,15 +176,17 @@ export default function App() {
     }
 
     try {
-      // 로그인 유저의 소속 팀 조회
+      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+
+      // 로그인 유저의 소속 팀 조회 (user_id 또는 discord_id)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('team_id')
-        .eq('user_id', session.user.id)
+        .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
         .maybeSingle()
 
       if (!profile || !profile.team_id) {
-        alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.\n디스코드 서버에서 먼저 종족 역할을 부여받아 주세요!')
+        alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.\n디스코드 서버에서 먼저 종족 역할을 부여받고 채팅을 남겨주세요!')
         return
       }
 
