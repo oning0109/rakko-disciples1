@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 URL
 const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
@@ -33,6 +33,11 @@ export default function App() {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // 💬 댓글 관련 상태
+  const [expandedPostIds, setExpandedPostIds] = useState([]) // 펼쳐진 게시글 ID 목록
+  const [commentsMap, setCommentsMap] = useState({}) // { [postId]: [comments...] }
+  const [commentInputs, setCommentInputs] = useState({}) // { [postId]: "입력 내용" }
 
   // 💖 좋아요 누른 게시글 ID 목록 (localStorage 연동)
   const [likedPostIds, setLikedPostIds] = useState(() => {
@@ -116,12 +121,95 @@ export default function App() {
     if (!error && data) setTeams(data)
   }
 
+  // 게시글 및 댓글 수 함께 조회
   const fetchPosts = async () => {
     const { data, error } = await supabase
       .from('posts')
-      .select('*')
+      .select('*, comments(count)')
       .order('created_at', { ascending: false })
     if (!error && data) setPosts(data)
+  }
+
+  // 특정 게시글의 댓글 목록 불러오기
+  const fetchCommentsForPost = async (postId) => {
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+
+    if (!error && data) {
+      setCommentsMap((prev) => ({ ...prev, [postId]: data }))
+    }
+  }
+
+  // 댓글 창 펼치기 / 접기
+  const toggleComments = (postId) => {
+    if (expandedPostIds.includes(postId)) {
+      setExpandedPostIds(expandedPostIds.filter((id) => id !== postId))
+    } else {
+      setExpandedPostIds([...expandedPostIds, postId])
+      fetchCommentsForPost(postId)
+    }
+  }
+
+  // 댓글 작성
+  const handleCreateComment = async (postId, e) => {
+    e.preventDefault()
+    if (!session) {
+      alert('로그인이 필요한 기능입니다!')
+      return
+    }
+
+    const content = (commentInputs[postId] || '').trim()
+    if (!content) {
+      alert('댓글 내용을 입력해 주세요.')
+      return
+    }
+
+    const authorName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '무명 제자'
+    const avatarUrl = session.user.user_metadata?.avatar_url || ''
+
+    const { error } = await supabase.from('comments').insert([
+      {
+        post_id: postId,
+        user_id: session.user.id,
+        author_name: authorName,
+        avatar_url: avatarUrl,
+        content: content,
+      }
+    ])
+
+    if (error) {
+      alert('댓글 작성 중 오류가 발생했습니다: ' + error.message)
+    } else {
+      setCommentInputs((prev) => ({ ...prev, [postId]: '' }))
+      fetchCommentsForPost(postId)
+      fetchPosts() // 댓글 수 갱신
+    }
+  }
+
+  // 댓글 삭제
+  const handleDeleteComment = async (commentId, postId, commentUserId) => {
+    if (!session) return
+    if (session.user.id !== commentUserId) {
+      alert('본인이 작성한 댓글만 삭제할 수 있습니다.')
+      return
+    }
+
+    if (!window.confirm('이 댓글을 삭제하시겠습니까?')) return
+
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('id', commentId)
+
+    if (error) {
+      alert('삭제 중 오류가 발생했습니다: ' + error.message)
+    } else {
+      fetchCommentsForPost(postId)
+      fetchPosts()
+    }
   }
 
   const handleImageChange = (e) => {
@@ -617,6 +705,9 @@ export default function App() {
             filteredPosts.map((post) => {
               const teamInfo = TEAM_CONFIG[post.team_id] || TEAM_CONFIG.rakko
               const isLiked = likedPostIds.includes(post.id)
+              const isCommentsExpanded = expandedPostIds.includes(post.id)
+              const postComments = commentsMap[post.id] || []
+              const commentCount = post.comments?.[0]?.count || 0
 
               return (
                 <div 
@@ -636,6 +727,29 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {/* 💬 댓글 토글 버튼 */}
+                      <button 
+                        type="button"
+                        onClick={() => toggleComments(post.id)}
+                        style={{ 
+                          border: '1px solid #e2e8f0', 
+                          background: isCommentsExpanded ? '#eff6ff' : '#f8fafc', 
+                          color: isCommentsExpanded ? '#2563eb' : '#64748b', 
+                          padding: '4px 10px', 
+                          borderRadius: '16px', 
+                          cursor: 'pointer', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px', 
+                          fontSize: '13px', 
+                          fontWeight: '600'
+                        }}
+                      >
+                        <MessageCircle size={14} /> 
+                        {commentCount}
+                      </button>
+
+                      {/* 💖 좋아요 버튼 */}
                       <button 
                         type="button"
                         onClick={() => handleLikePost(post.id, post.likes)}
@@ -650,8 +764,7 @@ export default function App() {
                           alignItems: 'center', 
                           gap: '4px', 
                           fontSize: '13px', 
-                          fontWeight: '600',
-                          transition: 'all 0.2s ease'
+                          fontWeight: '600'
                         }}
                       >
                         <Heart size={14} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
@@ -695,6 +808,73 @@ export default function App() {
                       <Clock size={13} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
                     </span>
                   </div>
+
+                  {/* 💬 펼쳐진 댓글 영역 */}
+                  {isCommentsExpanded && (
+                    <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px dashed #e2e8f0' }}>
+                      {/* 댓글 작성 폼 */}
+                      <form 
+                        onSubmit={(e) => handleCreateComment(post.id, e)} 
+                        style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}
+                      >
+                        <input 
+                          type="text" 
+                          placeholder={session ? "댓글을 남겨보세요..." : "로그인 후 댓글을 입력할 수 있습니다"}
+                          disabled={!session}
+                          value={commentInputs[post.id] || ''}
+                          onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
+                          style={{ flex: 1, padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                        />
+                        <button 
+                          type="submit" 
+                          disabled={!session}
+                          className="btn-primary" 
+                          style={{ padding: '6px 12px', fontSize: '13px', opacity: session ? 1 : 0.6 }}
+                        >
+                          <Send size={13} /> 등록
+                        </button>
+                      </form>
+
+                      {/* 댓글 목록 */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {postComments.length === 0 ? (
+                          <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0' }}>아직 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>
+                        ) : (
+                          postComments.map((comment) => (
+                            <div 
+                              key={comment.id} 
+                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px' }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                  {comment.avatar_url && (
+                                    <img src={comment.avatar_url} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
+                                  )}
+                                  <span style={{ fontWeight: '700', fontSize: '13px', color: '#334155' }}>{comment.author_name}</span>
+                                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    {new Date(comment.created_at).toLocaleDateString('ko-KR')}
+                                  </span>
+                                </div>
+                                <p style={{ margin: 0, fontSize: '13px', color: '#475569', whiteSpace: 'pre-wrap' }}>{comment.content}</p>
+                              </div>
+
+                              {session && session.user.id === comment.user_id && (
+                                <button 
+                                  type="button"
+                                  onClick={() => handleDeleteComment(comment.id, post.id, comment.user_id)}
+                                  style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                  title="댓글 삭제"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )
             })
