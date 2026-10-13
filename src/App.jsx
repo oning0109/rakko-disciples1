@@ -34,6 +34,28 @@ const getTitleByPoints = (points = 0) => {
   return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
 }
 
+// 🛡️ 오버워치 최고 역할군 및 점수 계산 함수 (탱/딜/힐 중 최고점 산출)
+const getHighestOwMMR = (profile) => {
+  if (!profile) return '언랭크'
+
+  const roles = [
+    { name: '탱', score: profile.tank_mmr || 0 },
+    { name: '딜', score: profile.deal_mmr || 0 },
+    { name: '힐', score: profile.heal_mmr || 0 },
+  ]
+
+  // 점수가 높은 순으로 정렬
+  roles.sort((a, b) => b.score - a.score)
+
+  const highest = roles[0]
+  // 최고 점수가 1000점 이하인 경우 플레이하지 않는 포지션으로 간주하여 언랭크 처리
+  if (!highest || highest.score <= 1000) {
+    return '언랭크'
+  }
+
+  return `${highest.name} ${highest.score} pt`
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community'
@@ -1354,7 +1376,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🎴 [MODAL] 제자 프로필 모달 (네모칸 가림 보수 및 오버워치 언랭크 처리) */}
+      {/* 🎴 [MODAL] 제자 프로필 모달 */}
       {/* ========================================================= */}
       {selectedProfileModal.isOpen && (
         <div 
@@ -1409,7 +1431,7 @@ export default function App() {
               <X size={15} />
             </button>
 
-            {/* 통합 통합 헤더 영역 (네모칸에 가려지지 않도록 패딩형 레이아웃으로 변경) */}
+            {/* 프로필 모달 통합 헤더 */}
             <div style={{
               background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
               padding: '24px 16px 16px 16px',
@@ -1467,7 +1489,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 게임 전적 정보 */}
+                {/* 게임 전적 정보 (탱/딜/힐 중 최고점 자동 표기) */}
                 <div style={{ marginBottom: '14px' }}>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Gamepad2 size={13} color="#3b82f6" /> 게임 전적 / 티어
@@ -1477,10 +1499,8 @@ export default function App() {
                     <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
                       <div style={{ fontSize: '10px', color: '#64748b' }}>오버워치</div>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#0284c7', marginTop: '2px' }}>
-                        {/* 오버워치 1000점 이하 또는 미등록 시 '언랭크' 표기 */}
-                        {(!selectedProfileModal.profile?.deal_mmr || selectedProfileModal.profile.deal_mmr <= 1000) 
-                          ? '언랭크' 
-                          : `${selectedProfileModal.profile.deal_mmr} pt`}
+                        {/* 탱/딜/힐 중 가장 높은 역할군 및 점수 산출 */}
+                        {getHighestOwMMR(selectedProfileModal.profile)}
                       </div>
                     </div>
 
