@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Swords } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Swords, Gamepad2, FileText } from 'lucide-react'
 
-// 상단 헤더 및 랏코 대표 이미지 URL
-const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
+// 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 기준)
+const RAKKO_MASTER_IMAGE = '/rakko.png'
 
-// 종족(팀) ID별 대표 캐릭터 및 이름 매핑
+// 종족(팀) ID별 대표 캐릭터 및 이름 매핑 (public/ 폴더 로컬 PNG)
 const TEAM_CONFIG = {
-  rakko: { name: '랏코', image: RAKKO_MASTER_IMAGE },
-  chiikawa: { name: '치이카와', image: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp' },
-  hachiware: { name: '하치와레', image: 'https://i.namu.wiki/i/mqiv0Rb5tbt2C3cCkJCMV_NCeX7YCFfXpYUIebD5_gyietmJewBWlY7uBnyWCHP92ZNY-uIJtNhpuKbyAP40HA.webp' },
-  usagi: { name: '우사기', image: 'https://i.namu.wiki/i/PJL_NmmYcz0IvJbqzwprwPbDN_X-bdmBEMAvlc2XZrxUu0crrWUdNV6eZ4_6cUz4CjXrnl4_xtSLGHvRnAEBBA.webp' },
-  momonga: { name: '모몽가', image: 'https://i.namu.wiki/i/m3vvkdjvU71l5ryX3GHeQz-t-39twY_SSmfUZGCnufTadOJBpMQhciMnQen0H8aufzkW8I13kRGBYJyI9UiYxw.webp' },
-  kurimanju: { name: '크리만쥬', image: 'https://i.namu.wiki/i/A-umWeRuPvy8wgp0raNVjoDASW6dyP_MTF58AMWMJjUwm2mJQyUwi7NWbuRcWPwZu5PhUgVbJK-Bb0u2A47ccg.webp' },
-  shisa: { name: '시사', image: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp' },
+  rakko: { name: '랏코', image: '/rakko.png' },
+  chiikawa: { name: '치이카와', image: '/chiikawa.png' },
+  hachiware: { name: '하치와레', image: '/hachiware.png' },
+  usagi: { name: '우사기', image: '/usagi.png' },
+  momonga: { name: '모몽가', image: '/momonga.png' },
+  kurimanju: { name: '크리만쥬', image: '/kurimanju.png' },
+  shisa: { name: '시사', image: '/shisa.png' },
 }
 
 // 🔮 랏코 스승의 운세 목록 데이터
@@ -24,6 +24,15 @@ const FORTUNES = [
   { grade: '평길 🍵', quote: '쉬는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
   { grade: '말길 🍃', quote: '과자는 적당히 먹고, 제초 수련부터 차근차근 시작해라.', points: 1 },
 ]
+
+// 🏅 포인트 구간별 자동 칭호 산정 함수
+const getTitleByPoints = (points = 0) => {
+  if (points >= 200) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
+  if (points >= 100) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
+  if (points >= 50) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
+  if (points >= 20) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
+  return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
+}
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -37,11 +46,19 @@ export default function App() {
   const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
 
   // 🗡️ 오늘의 토벌 수련 관련 상태
-  const [subjugationStatus, setSubjugationStatus] = useState('idle') // 'idle' | 'waiting' | 'ready' | 'finished'
+  const [subjugationStatus, setSubjugationStatus] = useState('idle')
   const [hasDoneSubjugation, setHasDoneSubjugation] = useState(false)
   const [subjugationResult, setSubjugationResult] = useState(null)
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
+
+  // 🎴 카카오톡 스타일 제자 프로필 모달 상태
+  const [selectedProfileModal, setSelectedProfileModal] = useState({
+    isOpen: false,
+    loading: false,
+    profile: null,
+    userPosts: []
+  })
 
   // 게시판 관련 상태
   const [posts, setPosts] = useState([])
@@ -168,6 +185,64 @@ export default function App() {
       .select('*, comments(count)')
       .order('created_at', { ascending: false })
     if (!error && data) setPosts(data)
+  }
+
+  // 🎴 제자 프로필 카카오톡 모달 열기
+  const handleOpenProfileModal = async (userId, authorName, authorAvatar) => {
+    setSelectedProfileModal({ isOpen: true, loading: true, profile: null, userPosts: [] })
+
+    let profileData = null
+    try {
+      if (userId) {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .or(`user_id.eq.${userId},discord_id.eq.${userId}`)
+          .maybeSingle()
+        profileData = data
+      }
+
+      if (!profileData && authorName) {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('username', authorName)
+          .maybeSingle()
+        profileData = data
+      }
+    } catch (err) {
+      console.error('프로필 정보 조회 실패:', err)
+    }
+
+    let postsData = []
+    try {
+      let query = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(5)
+      if (userId) {
+        query = query.or(`user_id.eq.${userId}`)
+      } else if (authorName) {
+        query = query.eq('author_name', authorName)
+      }
+      const { data } = await query
+      if (data) postsData = data
+    } catch (err) {
+      console.error('유저 작성 글 조회 실패:', err)
+    }
+
+    setSelectedProfileModal({
+      isOpen: true,
+      loading: false,
+      profile: profileData || {
+        username: authorName || '익명 제자',
+        avatar_url: authorAvatar || RAKKO_MASTER_IMAGE,
+        points: 0,
+        team_id: 'rakko'
+      },
+      userPosts: postsData
+    })
+  }
+
+  const handleCloseProfileModal = () => {
+    setSelectedProfileModal({ isOpen: false, loading: false, profile: null, userPosts: [] })
   }
 
   // 🔮 랏코 스승의 오늘의 운세 뽑기
@@ -583,137 +658,140 @@ export default function App() {
     : posts.filter((p) => p.team_id === selectedTeamFilter)
 
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto', padding: '32px 20px' }}>
+    <div style={{ maxWidth: '840px', margin: '0 auto', padding: '20px 16px' }}>
       {/* 1. 상단 프로필 & 헤더 */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img 
             src={RAKKO_MASTER_IMAGE} 
             alt="스승 랏코" 
             style={{ 
-              width: '52px', 
-              height: '52px', 
-              borderRadius: '16px', 
+              width: '48px', 
+              height: '48px', 
+              borderRadius: '14px', 
               backgroundColor: '#fef3c7', 
-              padding: '4px',
+              padding: '3px',
               objectFit: 'cover' 
             }} 
           />
           <div>
-            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '800' }}>랏코와 제자들</h1>
-            <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '14px' }}>디스코드 커뮤니티 대시보드</p>
+            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>랏코와 제자들</h1>
+            <p style={{ margin: '2px 0 0 0', color: 'var(--text-muted)', fontSize: '13px' }}>디스코드 커뮤니티 대시보드</p>
           </div>
         </div>
 
         {session ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', padding: '8px 16px', borderRadius: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div 
+            onClick={() => handleOpenProfileModal(session.user.id, session.user.user_metadata?.full_name, session.user.user_metadata?.avatar_url)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', padding: '6px 12px', borderRadius: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+          >
             <img 
               src={session.user.user_metadata?.avatar_url} 
               alt="avatar" 
-              style={{ width: '32px', height: '32px', borderRadius: '50%' }}
+              style={{ width: '28px', height: '28px', borderRadius: '50%' }}
             />
-            <span style={{ fontWeight: '600', fontSize: '14px' }}>{session.user.user_metadata?.full_name}</span>
-            <button onClick={handleLogout} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}>
-              <LogOut size={16}/>
+            <span style={{ fontWeight: '600', fontSize: '13px' }}>{session.user.user_metadata?.full_name}</span>
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleLogout(); }} 
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', padding: 0 }}
+            >
+              <LogOut size={15}/>
             </button>
           </div>
         ) : (
-          <button onClick={handleDiscordLogin} className="btn-primary">
-            <LogIn size={18}/> 디스코드 로그인
+          <button onClick={handleDiscordLogin} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px' }}>
+            <LogIn size={16}/> 로그인
           </button>
         )}
       </header>
 
-      {/* 🌟 2. 메인 네비게이션 탭 (3개 분리) */}
-      <nav style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+      {/* 2. 메인 네비게이션 탭 */}
+      <nav style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '4px' }}>
         <button
           type="button"
           onClick={() => setActiveTab('home')}
           style={{
-            flex: 1,
-            minWidth: '140px',
-            padding: '12px 10px',
+            flex: '1 0 auto',
+            padding: '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'home' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
             background: activeTab === 'home' ? '#eff6ff' : '#fff',
             color: activeTab === 'home' ? '#1d4ed8' : '#64748b',
             fontWeight: '700',
-            fontSize: '14px',
+            fontSize: '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            transition: 'all 0.2s ease'
+            whiteSpace: 'nowrap'
           }}
         >
-          <LayoutDashboard size={17} /> 메인 대시보드
+          <LayoutDashboard size={16} /> 대시보드
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('training')}
           style={{
-            flex: 1,
-            minWidth: '140px',
-            padding: '12px 10px',
+            flex: '1 0 auto',
+            padding: '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'training' ? '2px solid #d97706' : '1px solid #e2e8f0',
             background: activeTab === 'training' ? '#fffbe3' : '#fff',
             color: activeTab === 'training' ? '#b45309' : '#64748b',
             fontWeight: '700',
-            fontSize: '14px',
+            fontSize: '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            transition: 'all 0.2s ease'
+            whiteSpace: 'nowrap'
           }}
         >
-          <Swords size={17} /> 🥋 수련의 전당
+          <Swords size={16} /> 수련의 전당
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('community')}
           style={{
-            flex: 1,
-            minWidth: '140px',
-            padding: '12px 10px',
+            flex: '1 0 auto',
+            padding: '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'community' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
             background: activeTab === 'community' ? '#eff6ff' : '#fff',
             color: activeTab === 'community' ? '#1d4ed8' : '#64748b',
             fontWeight: '700',
-            fontSize: '14px',
+            fontSize: '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            transition: 'all 0.2s ease'
+            whiteSpace: 'nowrap'
           }}
         >
-          <MessageSquare size={17} /> 팀 커뮤니티
+          <MessageSquare size={16} /> 팀 커뮤니티
         </button>
       </nav>
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 1] 메인 대시보드 (팀 순위 리더보드) */}
+      {/* 📄 [PAGE 1] 메인 대시보드 */}
       {/* ========================================================= */}
       {activeTab === 'home' && (
         <section className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Trophy color="#f59e0b" size={22} /> 종족별 팀 순위
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Trophy color="#f59e0b" size={20} /> 종족별 팀 순위
             </h2>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: '#f3f4f6', padding: '4px 8px', borderRadius: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: '#f3f4f6', padding: '3px 6px', borderRadius: '6px' }}>
               실시간 자동 집계
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {teams.map((team, index) => (
               <div 
                 key={team.team_id} 
@@ -721,13 +799,13 @@ export default function App() {
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'space-between', 
-                  padding: '14px 18px', 
+                  padding: '12px 14px', 
                   backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
                   borderRadius: '12px',
                   border: '1px solid #f1f5f9'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
                     {index + 1}
                   </div>
@@ -736,8 +814,8 @@ export default function App() {
                     src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
                     alt={team.team_name} 
                     style={{ 
-                      width: '36px', 
-                      height: '36px', 
+                      width: '32px', 
+                      height: '32px', 
                       borderRadius: '50%', 
                       border: '2px solid #e2e8f0',
                       objectFit: 'cover',
@@ -745,15 +823,15 @@ export default function App() {
                     }} 
                   />
 
-                  <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
+                  <span style={{ fontWeight: '700', fontSize: '14px' }}>{team.team_name}</span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <MessageSquare size={14}/> {team.weekly_chats || 0}회
+                    <MessageSquare size={13}/> {team.weekly_chats || 0}회
                   </span>
-                  <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
-                    {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
+                  <span style={{ fontWeight: '800', color: '#d97706', fontSize: '15px' }}>
+                    {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
                   </span>
                 </div>
               </div>
@@ -763,19 +841,19 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 2] 🥋 수련의 전당 (운세 + 토벌 + 제초 수련) */}
+      {/* 📄 [PAGE 2] 🥋 수련의 전당 */}
       {/* ========================================================= */}
       {activeTab === 'training' && (
         <>
           {/* 🔮 랏코 스승의 오늘의 운세 */}
-          <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '20px' }}>
+          <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Gift color="#d97706" size={20} /> 🔮 랏코 스승의 오늘의 한마디 & 운세
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Gift color="#d97706" size={18} /> 🔮 랏코 스승의 오늘의 운세
                 </h2>
-                <p style={{ margin: 0, color: '#b45309', fontSize: '14px' }}>
-                  하루에 한 번 스승 랏코의 수련 지침과 함께 보너스 점수를 획득하세요!
+                <p style={{ margin: 0, color: '#b45309', fontSize: '13px' }}>
+                  하루에 한 번 스승의 지침과 보너스 점수를 획득하세요!
                 </p>
               </div>
 
@@ -787,41 +865,41 @@ export default function App() {
                   background: hasDrawnFortune ? '#cbd5e1' : '#d97706',
                   color: '#fff',
                   border: 'none',
-                  padding: '10px 16px',
+                  padding: '8px 12px',
                   borderRadius: '10px',
                   fontWeight: '700',
-                  fontSize: '14px',
+                  fontSize: '13px',
                   cursor: hasDrawnFortune ? 'default' : 'pointer'
                 }}
               >
-                {hasDrawnFortune ? '오늘 뽑기 완료' : '운세 뽑기 🥠'}
+                {hasDrawnFortune ? '완료' : '뽑기 🥠'}
               </button>
             </div>
 
             {todayFortune && (
-              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fcd34d', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '14px', fontWeight: '800', padding: '4px 10px', borderRadius: '12px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #fcd34d', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', padding: '3px 8px', borderRadius: '10px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', whiteSpace: 'nowrap' }}>
                   {todayFortune.grade}
                 </span>
-                <p style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#78350f', flex: 1 }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#78350f', flex: 1 }}>
                   "{todayFortune.quote}"
                 </p>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: '#d97706' }}>
-                  +{todayFortune.points} pt 획득
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#d97706', whiteSpace: 'nowrap' }}>
+                  +{todayFortune.points} pt
                 </span>
               </div>
             )}
           </section>
 
           {/* 🗡️ 오늘의 토벌 수련 */}
-          <section className="card" style={{ background: '#fef2f2', borderColor: '#fecdd3', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <section className="card" style={{ background: '#fef2f2', borderColor: '#fecdd3', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <div>
-                <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Target color="#dc2626" size={20} /> 🗡️ 오늘의 토벌 수련 (1일 1회)
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Target color="#dc2626" size={18} /> 🗡️ 오늘의 토벌 수련
                 </h2>
-                <p style={{ margin: 0, color: '#b91c1c', fontSize: '14px' }}>
-                  몬스터가 나타나면 가장 빠르게 클릭하세요! 순발력에 따라 포인트가 지급됩니다.
+                <p style={{ margin: 0, color: '#b91c1c', fontSize: '13px' }}>
+                  몬스터가 나타나면 가장 빠르게 클릭하세요!
                 </p>
               </div>
 
@@ -834,14 +912,14 @@ export default function App() {
                     background: hasDoneSubjugation ? '#cbd5e1' : '#dc2626',
                     color: '#fff',
                     border: 'none',
-                    padding: '10px 16px',
+                    padding: '8px 12px',
                     borderRadius: '10px',
                     fontWeight: '700',
-                    fontSize: '14px',
+                    fontSize: '13px',
                     cursor: hasDoneSubjugation ? 'default' : 'pointer'
                   }}
                 >
-                  {hasDoneSubjugation ? '토벌 완료' : '토벌 시작 🗡️'}
+                  {hasDoneSubjugation ? '완료' : '시작 🗡️'}
                 </button>
               )}
             </div>
@@ -852,14 +930,14 @@ export default function App() {
                 style={{
                   background: '#fee2e2',
                   border: '2px dashed #f87171',
-                  padding: '24px',
-                  borderRadius: '12px',
+                  padding: '18px',
+                  borderRadius: '10px',
                   textAlign: 'center',
                   cursor: 'pointer'
                 }}
               >
-                <p style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#991b1b' }}>
-                  👀 기회를 노리는 중... 몬스터가 나타날 때까지 기다리세요! (너무 일찍 누르면 실패)
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#991b1b' }}>
+                  👀 기회를 노리는 중... 나타날 때까지 대기하세요!
                 </p>
               </div>
             )}
@@ -869,32 +947,32 @@ export default function App() {
                 onClick={handleMonsterClick}
                 style={{
                   background: '#ef4444',
-                  padding: '28px',
-                  borderRadius: '12px',
+                  padding: '22px',
+                  borderRadius: '10px',
                   textAlign: 'center',
                   cursor: 'pointer',
                   color: '#fff',
-                  boxShadow: '0 0 16px rgba(239,68,68,0.5)'
+                  boxShadow: '0 0 12px rgba(239,68,68,0.5)'
                 }}
               >
-                <p style={{ margin: 0, fontSize: '22px', fontWeight: '900' }}>
-                  👾 몬스터 출현! 지금 바로 클릭하세요!!!
+                <p style={{ margin: 0, fontSize: '18px', fontWeight: '900' }}>
+                  👾 몬스터 출현! 클릭하세요!!!
                 </p>
               </div>
             )}
 
             {subjugationStatus === 'finished' && subjugationResult && (
-              <div style={{ background: '#fff', padding: '14px 18px', borderRadius: '12px', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '800', padding: '4px 10px', borderRadius: '12px', background: '#fee2e2', color: '#991b1b' }}>
+              <div style={{ background: '#fff', padding: '10px 14px', borderRadius: '10px', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: '#fee2e2', color: '#991b1b' }}>
                     {subjugationResult.grade}
                   </span>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#334155' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>
                     반응 속도: <b>{subjugationResult.reactionTime} ms</b>
                   </span>
                 </div>
-                <span style={{ fontSize: '14px', fontWeight: '800', color: '#dc2626' }}>
-                  +{subjugationResult.points} pt 획득
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#dc2626' }}>
+                  +{subjugationResult.points} pt
                 </span>
               </div>
             )}
@@ -904,20 +982,20 @@ export default function App() {
           <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles color="#16a34a" size={20} /> 🌱 오늘의 제초 수련
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
                 </h2>
-                <p style={{ margin: 0, color: '#15803d', fontSize: '14px' }}>
-                  잡초를 뽑아 획득한 포인트는 소속 팀의 총점에 누적됩니다.
+                <p style={{ margin: 0, color: '#15803d', fontSize: '13px' }}>
+                  잡초를 뽑아 팀 포인트를 모으세요.
                 </p>
               </div>
-              <button onClick={handleWeeding} className="btn-weed">
-                <Flame size={18} /> 잡초 뽑기 (+2 pt)
+              <button onClick={handleWeeding} className="btn-weed" style={{ padding: '8px 12px', fontSize: '13px' }}>
+                <Flame size={16} /> 잡초 뽑기 (+2 pt)
               </button>
             </div>
 
             {session && (
-              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '14px' }}>
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '13px' }}>
                 현재 세션 누적 포인트: <b>{userPoints}</b> pt
               </div>
             )}
@@ -926,37 +1004,37 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 3] 팀 커뮤니티 */}
+      {/* 📄 [PAGE 3] 팀 커뮤니티 (모발 최적화 정렬) */}
       {/* ========================================================= */}
       {activeTab === 'community' && (
         <section className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <MessageSquare color="#3b82f6" size={22} /> 💬 제자 마을 팀 커뮤니티
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <MessageSquare color="#3b82f6" size={20} /> 💬 제자 마을 팀 커뮤니티
             </h2>
           </div>
 
           {/* 팀별 필터 탭 */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '14px' }}>
             <button
               type="button"
               onClick={() => setSelectedTeamFilter('all')}
               style={{
-                padding: '6px 14px',
-                borderRadius: '20px',
+                padding: '5px 12px',
+                borderRadius: '16px',
                 border: 'none',
                 background: selectedTeamFilter === 'all' ? '#3b82f6' : '#f1f5f9',
                 color: selectedTeamFilter === 'all' ? '#fff' : '#475569',
                 fontWeight: '600',
-                fontSize: '13px',
+                fontSize: '12px',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '4px'
               }}
             >
-              <Users size={14} /> 전체보기
+              <Users size={13} /> 전체보기
             </button>
             {Object.entries(TEAM_CONFIG).map(([id, info]) => (
               <button
@@ -964,48 +1042,50 @@ export default function App() {
                 key={id}
                 onClick={() => setSelectedTeamFilter(id)}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
+                  padding: '5px 12px',
+                  borderRadius: '16px',
                   border: selectedTeamFilter === id ? '2px solid #3b82f6' : '1px solid #e2e8f0',
                   background: selectedTeamFilter === id ? '#eff6ff' : '#fff',
                   color: selectedTeamFilter === id ? '#1d4ed8' : '#334155',
                   fontWeight: selectedTeamFilter === id ? '700' : '500',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '4px'
                 }}
               >
-                <img src={info.image} alt={info.name} style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={info.image} alt={info.name} style={{ width: '15px', height: '15px', borderRadius: '50%', objectFit: 'cover' }} />
                 {info.name}
               </button>
             ))}
           </div>
 
-          {/* 글 작성 폼 */}
-          <form onSubmit={handleCreatePost} style={{ marginBottom: '24px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-              <select 
-                value={postTeam} 
-                onChange={(e) => setPostTeam(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff', fontWeight: '600' }}
-              >
-                {Object.entries(TEAM_CONFIG).map(([id, info]) => (
-                  <option key={id} value={id}>[{info.name}] 게시판</option>
-                ))}
-              </select>
+          {/* 글 작성 폼 (모바일 반응형 정렬) */}
+          <form onSubmit={handleCreatePost} style={{ marginBottom: '20px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <select 
+                  value={postTeam} 
+                  onChange={(e) => setPostTeam(e.target.value)}
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff', fontWeight: '600' }}
+                >
+                  {Object.entries(TEAM_CONFIG).map(([id, info]) => (
+                    <option key={id} value={id}>[{info.name}] 게시판</option>
+                  ))}
+                </select>
 
-              <select 
-                value={newCategory} 
-                onChange={(e) => setNewCategory(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff' }}
-              >
-                <option value="자유">자유</option>
-                <option value="수련인증">수련인증</option>
-                <option value="질문">질문</option>
-              </select>
+                <select 
+                  value={newCategory} 
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                >
+                  <option value="자유">자유</option>
+                  <option value="수련인증">수련인증</option>
+                  <option value="질문">질문</option>
+                </select>
+              </div>
 
               <input 
                 type="text" 
@@ -1013,7 +1093,7 @@ export default function App() {
                 value={newTitle}
                 disabled={!session || isSubmitting}
                 onChange={(e) => setNewTitle(e.target.value)}
-                style={{ flex: 1, minWidth: '200px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
               />
             </div>
 
@@ -1023,15 +1103,15 @@ export default function App() {
               disabled={!session || isSubmitting}
               onChange={(e) => setNewContent(e.target.value)}
               rows={3}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', marginBottom: '8px' }}
             />
 
             {imagePreview && (
-              <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
+              <div style={{ position: 'relative', display: 'inline-block', marginBottom: '10px' }}>
                 <img 
                   src={imagePreview} 
                   alt="업로드 미리보기" 
-                  style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
+                  style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
                 />
                 <button
                   type="button"
@@ -1044,22 +1124,22 @@ export default function App() {
                     color: '#fff',
                     border: 'none',
                     borderRadius: '50%',
-                    width: '22px',
-                    height: '22px',
+                    width: '20px',
+                    height: '20px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}
                 >
-                  <X size={14} />
+                  <X size={12} />
                 </button>
               </div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: session ? 'pointer' : 'not-allowed', color: '#475569', fontSize: '14px', background: '#fff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                <Upload size={16} color="#3b82f6" />
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: session ? 'pointer' : 'not-allowed', color: '#475569', fontSize: '13px', background: '#fff', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <Upload size={14} color="#3b82f6" />
                 <span>사진 첨부</span>
                 <input 
                   type="file" 
@@ -1074,18 +1154,18 @@ export default function App() {
                 type="submit" 
                 disabled={!session || isSubmitting} 
                 className="btn-primary" 
-                style={{ padding: '8px 16px', opacity: session && !isSubmitting ? 1 : 0.6 }}
+                style={{ padding: '6px 14px', fontSize: '13px', opacity: session && !isSubmitting ? 1 : 0.6 }}
               >
-                <Send size={16} /> {isSubmitting ? '업로드 중...' : '글 작성하기'}
+                <Send size={14} /> {isSubmitting ? '업로드 중...' : '작성'}
               </button>
             </div>
           </form>
 
-          {/* 게시글 목록 */}
+          {/* 게시글 목록 (모바일 정렬 개선) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filteredPosts.length === 0 ? (
-              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px 0' }}>
-                해당 커뮤니티에 남겨진 이야기가 없습니다. 첫 번째 글과 사진을 남겨보세요!
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0', fontSize: '13px' }}>
+                남겨진 이야기가 없습니다. 첫 번째 글을 남겨보세요!
               </p>
             ) : (
               filteredPosts.map((post) => {
@@ -1098,148 +1178,157 @@ export default function App() {
                 return (
                   <div 
                     key={post.id} 
-                    style={{ padding: '16px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
+                    style={{ padding: '14px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <img src={teamInfo.image} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'cover' }} />
-                          {teamInfo.name}
-                        </span>
-                        <span style={{ fontSize: '12px', fontWeight: '600', padding: '2px 8px', borderRadius: '12px', background: '#f1f5f9', color: '#475569' }}>
-                          {post.category || '자유'}
-                        </span>
-                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>{post.title}</h3>
-                      </div>
+                    {/* 모바일 최적화 포스트 헤더 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 7px', borderRadius: '10px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <img src={teamInfo.image} alt="" style={{ width: '13px', height: '13px', borderRadius: '50%', objectFit: 'cover' }} />
+                            {teamInfo.name}
+                          </span>
+                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '2px 7px', borderRadius: '10px', background: '#f1f5f9', color: '#475569' }}>
+                            {post.category || '자유'}
+                          </span>
+                        </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {/* 💬 댓글 버튼 */}
-                        <button 
-                          type="button"
-                          onClick={() => toggleComments(post.id)}
-                          style={{ 
-                            border: '1px solid #e2e8f0', 
-                            background: isCommentsExpanded ? '#eff6ff' : '#f8fafc', 
-                            color: isCommentsExpanded ? '#2563eb' : '#64748b', 
-                            padding: '4px 10px', 
-                            borderRadius: '16px', 
-                            cursor: 'pointer', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px', 
-                            fontSize: '13px', 
-                            fontWeight: '600'
-                          }}
-                        >
-                          <MessageCircle size={14} /> 
-                          {commentCount}
-                        </button>
-
-                        {/* 💖 좋아요 버튼 */}
-                        <button 
-                          type="button"
-                          onClick={() => handleLikePost(post.id, post.likes)}
-                          style={{ 
-                            border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
-                            background: isLiked ? '#fff0f3' : '#f8fafc', 
-                            color: isLiked ? '#e11d48' : '#64748b', 
-                            padding: '4px 10px', 
-                            borderRadius: '16px', 
-                            cursor: 'pointer', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px', 
-                            fontSize: '13px', 
-                            fontWeight: '600'
-                          }}
-                        >
-                          <Heart size={14} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
-                          {post.likes || 0}
-                        </button>
-
-                        {session && session.user.id === post.user_id && (
+                        {/* 댓글, 좋아요, 삭제 버튼 그룹 */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <button 
                             type="button"
-                            onClick={() => handleDeletePost(post.id, post.user_id)}
-                            style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
-                            title="게시글 삭제"
+                            onClick={() => toggleComments(post.id)}
+                            style={{ 
+                              border: '1px solid #e2e8f0', 
+                              background: isCommentsExpanded ? '#eff6ff' : '#f8fafc', 
+                              color: isCommentsExpanded ? '#2563eb' : '#64748b', 
+                              padding: '3px 8px', 
+                              borderRadius: '14px', 
+                              cursor: 'pointer', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '3px', 
+                              fontSize: '12px', 
+                              fontWeight: '600'
+                            }}
                           >
-                            <Trash2 size={14} /> 삭제
+                            <MessageCircle size={13} /> {commentCount}
                           </button>
-                        )}
+
+                          <button 
+                            type="button"
+                            onClick={() => handleLikePost(post.id, post.likes)}
+                            style={{ 
+                              border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
+                              background: isLiked ? '#fff0f3' : '#f8fafc', 
+                              color: isLiked ? '#e11d48' : '#64748b', 
+                              padding: '3px 8px', 
+                              borderRadius: '14px', 
+                              cursor: 'pointer', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '3px', 
+                              fontSize: '12px', 
+                              fontWeight: '600'
+                            }}
+                          >
+                            <Heart size={13} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
+                            {post.likes || 0}
+                          </button>
+
+                          {session && session.user.id === post.user_id && (
+                            <button 
+                              type="button"
+                              onClick={() => handleDeletePost(post.id, post.user_id)}
+                              style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '3px 6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '11px' }}
+                            >
+                              <Trash2 size={12} /> 삭제
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                        {post.title}
+                      </h3>
                     </div>
 
-                    <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#334155', lineHeight: '1.6', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
                       {post.content}
                     </p>
 
                     {post.image_url && (
-                      <div style={{ marginBottom: '12px' }}>
+                      <div style={{ marginBottom: '10px' }}>
                         <a href={post.image_url} target="_blank" rel="noopener noreferrer">
                           <img 
                             src={post.image_url} 
                             alt="게시글 첨부 사진" 
-                            style={{ maxWidth: '100%', maxHeight: '360px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'cover' }} 
+                            style={{ maxWidth: '100%', maxHeight: '300px', height: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'cover' }} 
                           />
                         </a>
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <User size={13} /> {post.author_name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      <span 
+                        onClick={() => handleOpenProfileModal(post.user_id, post.author_name)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        <User size={12} /> {post.author_name}
                       </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={13} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <Clock size={12} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
                       </span>
                     </div>
 
                     {/* 💬 댓글 영역 */}
                     {isCommentsExpanded && (
-                      <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px dashed #e2e8f0' }}>
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #e2e8f0' }}>
                         <form 
                           onSubmit={(e) => handleCreateComment(post.id, e)} 
-                          style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}
+                          style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}
                         >
                           <input 
                             type="text" 
-                            placeholder={session ? "댓글을 남겨보세요..." : "로그인 후 댓글을 입력할 수 있습니다"}
+                            placeholder={session ? "댓글 남기기..." : "로그인 필요"}
                             disabled={!session}
                             value={commentInputs[post.id] || ''}
                             onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
-                            style={{ flex: 1, padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                            style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }}
                           />
                           <button 
                             type="submit" 
                             disabled={!session}
                             className="btn-primary" 
-                            style={{ padding: '6px 12px', fontSize: '13px', opacity: session ? 1 : 0.6 }}
+                            style={{ padding: '6px 10px', fontSize: '12px', opacity: session ? 1 : 0.6 }}
                           >
-                            <Send size={13} /> 등록
+                            <Send size={12} /> 등록
                           </button>
                         </form>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           {postComments.length === 0 ? (
-                            <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0' }}>아직 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>
+                            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0' }}>첫 댓글을 남겨보세요!</p>
                           ) : (
                             postComments.map((comment) => (
                               <div 
                                 key={comment.id} 
-                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px' }}
+                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 10px', borderRadius: '8px' }}
                               >
                                 <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                  <div 
+                                    onClick={() => handleOpenProfileModal(comment.user_id, comment.author_name, comment.avatar_url)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px', cursor: 'pointer' }}
+                                  >
                                     {comment.avatar_url && (
-                                      <img src={comment.avatar_url} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
+                                      <img src={comment.avatar_url} alt="" style={{ width: '15px', height: '15px', borderRadius: '50%' }} />
                                     )}
-                                    <span style={{ fontWeight: '700', fontSize: '13px', color: '#334155' }}>{comment.author_name}</span>
-                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    <span style={{ fontWeight: '700', fontSize: '12px', color: '#334155', textDecoration: 'underline' }}>{comment.author_name}</span>
+                                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>
                                       {new Date(comment.created_at).toLocaleDateString('ko-KR')}
                                     </span>
                                   </div>
-                                  <p style={{ margin: 0, fontSize: '13px', color: '#475569', whiteSpace: 'pre-wrap' }}>{comment.content}</p>
+                                  <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: '1.4', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{comment.content}</p>
                                 </div>
 
                                 {session && session.user.id === comment.user_id && (
@@ -1247,9 +1336,8 @@ export default function App() {
                                     type="button"
                                     onClick={() => handleDeleteComment(comment.id, post.id, comment.user_id)}
                                     style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                    title="댓글 삭제"
                                   >
-                                    <Trash2 size={13} />
+                                    <Trash2 size={12} />
                                   </button>
                                 )}
                               </div>
@@ -1265,6 +1353,180 @@ export default function App() {
             )}
           </div>
         </section>
+      )}
+
+      {/* ========================================================= */}
+      {/* 🎴 [MODAL] 제자 프로필 카카오톡 스타일 모달 */}
+      {/* ========================================================= */}
+      {selectedProfileModal.isOpen && (
+        <div 
+          onClick={handleCloseProfileModal}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px'
+          }} 
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            style={{
+              width: '100%',
+              maxWidth: '360px',
+              backgroundColor: '#fff',
+              borderRadius: '20px',
+              overflow: 'hidden',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              position: 'relative'
+            }}
+          >
+            <button 
+              onClick={handleCloseProfileModal}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'rgba(0,0,0,0.3)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '50%',
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 10
+              }}
+            >
+              <X size={15} />
+            </button>
+
+            <div style={{
+              height: '90px',
+              background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
+              position: 'relative'
+            }} />
+
+            {selectedProfileModal.loading ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                프로필 조회 중...
+              </div>
+            ) : (
+              <div style={{ padding: '0 16px 16px 16px', marginTop: '-36px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                  <img 
+                    src={selectedProfileModal.profile?.avatar_url || RAKKO_MASTER_IMAGE} 
+                    alt="프로필" 
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      border: '3px solid #fff',
+                      backgroundColor: '#fff',
+                      objectFit: 'cover',
+                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                    }}
+                  />
+                  
+                  <h3 style={{ margin: '4px 0 2px 0', fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>
+                    {selectedProfileModal.profile?.username || '익명 제자'}
+                  </h3>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {selectedProfileModal.profile?.team_id && (
+                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 7px', borderRadius: '10px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <img src={TEAM_CONFIG[selectedProfileModal.profile.team_id]?.image || RAKKO_MASTER_IMAGE} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
+                        {TEAM_CONFIG[selectedProfileModal.profile.team_id]?.name || '랏코'}
+                      </span>
+                    )}
+
+                    {(() => {
+                      const title = getTitleByPoints(selectedProfileModal.profile?.points || 0)
+                      return (
+                        <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 7px', borderRadius: '10px', background: title.bg, color: title.color, border: `1px solid ${title.color}33` }}>
+                          {title.name}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                </div>
+
+                <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '10px', border: '1px solid #f1f5f9', textAlign: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>누적 제초/수련 포인트</span>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#d97706', marginTop: '2px' }}>
+                    {(selectedProfileModal.profile?.points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Gamepad2 size={13} color="#3b82f6" /> 게임 전적 / 티어
+                  </h4>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', textAlign: 'center' }}>
+                    <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: '10px', color: '#64748b' }}>오버워치</div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#0284c7', marginTop: '2px' }}>
+                        {selectedProfileModal.profile?.deal_mmr ? `${selectedProfileModal.profile.deal_mmr} pt` : '미등록'}
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: '10px', color: '#64748b' }}>롤</div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#059669', marginTop: '2px' }}>
+                        {selectedProfileModal.profile?.lol_tier || '미등록'}
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: '10px', color: '#64748b' }}>발로란트</div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#e11d48', marginTop: '2px' }}>
+                        {selectedProfileModal.profile?.val_tier || '미등록'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <FileText size={13} color="#3b82f6" /> 최근 작성한 글 ({selectedProfileModal.userPosts.length})
+                  </h4>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
+                    {selectedProfileModal.userPosts.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8', textAlign: 'center', padding: '8px 0' }}>
+                        작성한 글이 없습니다.
+                      </p>
+                    ) : (
+                      selectedProfileModal.userPosts.map((post) => (
+                        <div 
+                          key={post.id} 
+                          style={{ padding: '5px 8px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        >
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                            {post.title}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                            {new Date(post.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
