@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2 } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2, Image as ImageIcon, X, Users, Upload } from 'lucide-react'
 
-// 종족(팀) ID별 대표 캐릭터 이미지 매핑
-const TEAM_IMAGES = {
-  chiikawa: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp',
-  hachiware: 'https://i.namu.wiki/i/mqiv0Rb5tbt2C3cCkJCMV_NCeX7YCFfXpYUIebD5_gyietmJewBWlY7uBnyWCHP92ZNY-uIJtNhpuKbyAP40HA.webp',
-  usagi: 'https://i.namu.wiki/i/PJL_NmmYcz0IvJbqzwprwPbDN_X-bdmBEMAvlc2XZrxUu0crrWUdNV6eZ4_6cUz4CjXrnl4_xtSLGHvRnAEBBA.webp',
-  momonga: 'https://i.namu.wiki/i/m3vvkdjvU71l5ryX3GHeQz-t-39twY_SSmfUZGCnufTadOJBpMQhciMnQen0H8aufzkW8I13kRGBYJyI9UiYxw.webp',
-  kurimanju: 'https://i.namu.wiki/i/A-umWeRuPvy8wgp0raNVjoDASW6dyP_MTF58AMWMJjUwm2mJQyUwi7NWbuRcWPwZu5PhUgVbJK-Bb0u2A47ccg.webp',
-  shisa: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp',
+// 종족(팀) ID별 대표 캐릭터 및 이름 매핑
+const TEAM_CONFIG = {
+  chiikawa: { name: '치이카와', image: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp' },
+  hachiware: { name: '하치와레', image: 'https://i.namu.wiki/i/mqiv0Rb5tbt2C3cCkJCMV_NCeX7YCFfXpYUIebD5_gyietmJewBWlY7uBnyWCHP92ZNY-uIJtNhpuKbyAP40HA.webp' },
+  usagi: { name: '우사기', image: 'https://i.namu.wiki/i/PJL_NmmYcz0IvJbqzwprwPbDN_X-bdmBEMAvlc2XZrxUu0crrWUdNV6eZ4_6cUz4CjXrnl4_xtSLGHvRnAEBBA.webp' },
+  momonga: { name: '모몽가', image: 'https://i.namu.wiki/i/m3vvkdjvU71l5ryX3GHeQz-t-39twY_SSmfUZGCnufTadOJBpMQhciMnQen0H8aufzkW8I13kRGBYJyI9UiYxw.webp' },
+  kurimanju: { name: '크리만쥬', image: 'https://i.namu.wiki/i/A-umWeRuPvy8wgp0raNVjoDASW6dyP_MTF58AMWMJjUwm2mJQyUwi7NWbuRcWPwZu5PhUgVbJK-Bb0u2A47ccg.webp' },
+  shisa: { name: '시사', image: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp' },
 }
 
-// 상단 헤더 랏코 스승 대표 이미지 URL
 const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
 
 export default function App() {
@@ -20,16 +19,19 @@ export default function App() {
   const [teams, setTeams] = useState([])
   const [userPoints, setUserPoints] = useState(0)
 
-  // 수다 게시판 상태
+  // 게시판 관련 상태
   const [posts, setPosts] = useState([])
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState('all') // 팀별 필터링 상태 ('all' 또는 팀ID)
   const [newTitle, setNewTitle] = useState('')
   const [newContent, setNewContent] = useState('')
   const [newCategory, setNewCategory] = useState('자유')
+  const [postTeam, setPostTeam] = useState('chiikawa') // 게시글 대상 팀
+  
+  // 이미지 업로드 상태
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // =========================================================
-  // 로그인 세션 감지 및 user_profiles 테이블 실시간 프로필 동기화
-  // =========================================================
   useEffect(() => {
     const syncUserProfile = async (currentSession) => {
       if (!currentSession?.user) return
@@ -59,6 +61,10 @@ export default function App() {
             username: username,
             avatar_url: avatarUrl
           }).eq('discord_id', discordId)
+          
+          if (existingProfile.team_id) {
+            setPostTeam(existingProfile.team_id)
+          }
         } else {
           await supabase.from('user_profiles').insert({
             user_id: user.id,
@@ -90,7 +96,6 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // 1. 팀 순위 불러오기
   const fetchTeamScores = async () => {
     const { data, error } = await supabase
       .from('team_scores')
@@ -99,7 +104,6 @@ export default function App() {
     if (!error && data) setTeams(data)
   }
 
-  // 2. 게시글 목록 불러오기
   const fetchPosts = async () => {
     const { data, error } = await supabase
       .from('posts')
@@ -108,7 +112,32 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 3. 게시글 작성하기
+  // 이미지 선택 처리
+  const handleImageChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      alert('이미지 파일만 업로드할 수 있습니다.')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('파일 크기는 5MB 이하만 업로드 가능합니다.')
+      return
+    }
+
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  // 선택한 이미지 취소
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+  }
+
+  // 게시글 작성 처리
   const handleCreatePost = async (e) => {
     e.preventDefault()
     if (!session) {
@@ -124,14 +153,40 @@ export default function App() {
     const authorName = session.user.user_metadata.full_name || session.user.user_metadata.name || '무명 제자'
     const userId = session.user.id
 
+    let uploadedImageUrl = null
+
+    // 1. 이미지가 선택되었다면 Supabase Storage에 업로드
+    if (imageFile) {
+      const fileExt = imageFile.name.split('.').pop()
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('post-images')
+        .upload(fileName, imageFile)
+
+      if (uploadError) {
+        alert('이미지 업로드 실패: ' + uploadError.message)
+        setIsSubmitting(false)
+        return
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('post-images')
+        .getPublicUrl(fileName)
+
+      uploadedImageUrl = urlData.publicUrl
+    }
+
+    // 2. 게시글 데이터 DB 추가
     const { error } = await supabase.from('posts').insert([
       {
         user_id: userId,
         author_name: authorName,
-        team_id: 'chiikawa',
+        team_id: postTeam,
         category: newCategory,
         title: newTitle.trim(),
         content: newContent.trim(),
+        image_url: uploadedImageUrl
       }
     ])
 
@@ -142,11 +197,12 @@ export default function App() {
     } else {
       setNewTitle('')
       setNewContent('')
+      setImageFile(null)
+      setImagePreview(null)
       fetchPosts()
     }
   }
 
-  // 4. 게시글 삭제하기
   const handleDeletePost = async (postId, postUserId) => {
     if (!session) return
     if (session.user.id !== postUserId) {
@@ -168,7 +224,6 @@ export default function App() {
     }
   }
 
-  // 5. 게시글 좋아요
   const handleLikePost = async (postId, currentLikes) => {
     const { error } = await supabase
       .from('posts')
@@ -180,7 +235,6 @@ export default function App() {
     }
   }
 
-  // 6. 잡초 뽑기
   const handleWeeding = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -243,6 +297,11 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
   }
+
+  // 선택된 필터 탭에 따른 게시글 필터링
+  const filteredPosts = selectedTeamFilter === 'all'
+    ? posts
+    : posts.filter((p) => p.team_id === selectedTeamFilter)
 
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '32px 20px' }}>
@@ -330,7 +389,7 @@ export default function App() {
                 </div>
 
                 <img 
-                  src={TEAM_IMAGES[team.team_id] || RAKKO_MASTER_IMAGE} 
+                  src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
                   alt={team.team_name} 
                   style={{ 
                     width: '36px', 
@@ -381,15 +440,73 @@ export default function App() {
         )}
       </section>
 
-      {/* 5. 제자 마을 수다 게시판 */}
+      {/* 5. 팀 커뮤니티 & 수다 게시판 */}
       <section className="card">
-        <h2 style={{ margin: '0 0 16px 0', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <MessageSquare color="#3b82f6" size={22} /> 💬 제자 마을 수다 게시판
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MessageSquare color="#3b82f6" size={22} /> 💬 제자 마을 팀 커뮤니티
+          </h2>
+        </div>
+
+        {/* 🌟 팀별 필터 탭 🌟 */}
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '16px' }}>
+          <button
+            onClick={() => setSelectedTeamFilter('all')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: 'none',
+              background: selectedTeamFilter === 'all' ? '#3b82f6' : '#f1f5f9',
+              color: selectedTeamFilter === 'all' ? '#fff' : '#475569',
+              fontWeight: '600',
+              fontSize: '13px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Users size={14} /> 전체보기
+          </button>
+          {Object.entries(TEAM_CONFIG).map(([id, info]) => (
+            <button
+              key={id}
+              onClick={() => setSelectedTeamFilter(id)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: selectedTeamFilter === id ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                background: selectedTeamFilter === id ? '#eff6ff' : '#fff',
+                color: selectedTeamFilter === id ? '#1d4ed8' : '#334155',
+                fontWeight: selectedTeamFilter === id ? '700' : '500',
+                fontSize: '13px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <img src={info.image} alt={info.name} style={{ width: '18px', height: '18px', borderRadius: '50%' }} />
+              {info.name}
+            </button>
+          ))}
+        </div>
 
         {/* 글 작성 폼 */}
         <form onSubmit={handleCreatePost} style={{ marginBottom: '24px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+            <select 
+              value={postTeam} 
+              onChange={(e) => setPostTeam(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff', fontWeight: '600' }}
+            >
+              {Object.entries(TEAM_CONFIG).map(([id, info]) => (
+                <option key={id} value={id}>[{info.name}] 게시판</option>
+              ))}
+            </select>
+
             <select 
               value={newCategory} 
               onChange={(e) => setNewCategory(e.target.value)}
@@ -399,88 +516,156 @@ export default function App() {
               <option value="수련인증">수련인증</option>
               <option value="질문">질문</option>
             </select>
+
             <input 
               type="text" 
               placeholder={session ? "제목을 입력하세요" : "로그인 후 글을 쓸 수 있습니다"}
               value={newTitle}
               disabled={!session || isSubmitting}
               onChange={(e) => setNewTitle(e.target.value)}
-              style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: '200px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
             />
           </div>
+
           <textarea 
-            placeholder={session ? "제자들과 나누고 싶은 이야기를 적어보세요..." : "로그인 후 이야기를 나누어 보세요!"}
+            placeholder={session ? "팀원들과 나누고 싶은 이야기나 인증할 사진을 올려보세요..." : "로그인 후 이야기를 나누어 보세요!"}
             value={newContent}
             disabled={!session || isSubmitting}
             onChange={(e) => setNewContent(e.target.value)}
             rows={3}
             style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' }}
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+
+          {/* 📷 이미지 미리보기 박스 */}
+          {imagePreview && (
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
+              <img 
+                src={imagePreview} 
+                alt="업로드 미리보기" 
+                style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
+              />
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-6px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '22px',
+                  height: '22px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: session ? 'pointer' : 'not-allowed', color: '#475569', fontSize: '14px', background: '#fff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+              <Upload size={16} color="#3b82f6" />
+              <span>사진 첨부</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageChange} 
+                disabled={!session || isSubmitting}
+                style={{ display: 'none' }} 
+              />
+            </label>
+
             <button 
               type="submit" 
               disabled={!session || isSubmitting} 
               className="btn-primary" 
-              style={{ padding: '8px 16px', opacity: session ? 1 : 0.6 }}
+              style={{ padding: '8px 16px', opacity: session && !isSubmitting ? 1 : 0.6 }}
             >
-              <Send size={16} /> 글 작성하기
+              <Send size={16} /> {isSubmitting ? '업로드 중...' : '글 작성하기'}
             </button>
           </div>
         </form>
 
         {/* 게시글 목록 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {posts.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0' }}>
-              아직 남겨진 이야기가 없습니다. 첫 번째 글을 작성해 보세요!
+          {filteredPosts.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px 0' }}>
+              해당 커뮤니티에 남겨진 이야기가 없습니다. 첫 번째 글과 사진을 남겨보세요!
             </p>
           ) : (
-            posts.map((post) => (
-              <div 
-                key={post.id} 
-                style={{ padding: '16px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', background: '#e0f2fe', color: '#0369a1' }}>
-                      {post.category || '자유'}
-                    </span>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>{post.title}</h3>
-                  </div>
+            filteredPosts.map((post) => {
+              const teamInfo = TEAM_CONFIG[post.team_id] || TEAM_CONFIG.chiikawa
+              return (
+                <div 
+                  key={post.id} 
+                  style={{ padding: '16px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <img src={teamInfo.image} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%' }} />
+                        {teamInfo.name}
+                      </span>
+                      <span style={{ fontSize: '12px', fontWeight: '600', padding: '2px 8px', borderRadius: '12px', background: '#f1f5f9', color: '#475569' }}>
+                        {post.category || '자유'}
+                      </span>
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>{post.title}</h3>
+                    </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button 
-                      onClick={() => handleLikePost(post.id, post.likes)}
-                      style={{ border: 'none', background: '#fff0f3', color: '#e11d48', padding: '4px 10px', borderRadius: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: '600' }}
-                    >
-                      <Heart size={14} fill="#e11d48" /> {post.likes || 0}
-                    </button>
-
-                    {session && session.user.id === post.user_id && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button 
-                        onClick={() => handleDeletePost(post.id, post.user_id)}
-                        style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
-                        title="게시글 삭제"
+                        onClick={() => handleLikePost(post.id, post.likes)}
+                        style={{ border: 'none', background: '#fff0f3', color: '#e11d48', padding: '4px 10px', borderRadius: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: '600' }}
                       >
-                        <Trash2 size={14} /> 삭제
+                        <Heart size={14} fill="#e11d48" /> {post.likes || 0}
                       </button>
-                    )}
+
+                      {session && session.user.id === post.user_id && (
+                        <button 
+                          onClick={() => handleDeletePost(post.id, post.user_id)}
+                          style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                          title="게시글 삭제"
+                        >
+                          <Trash2 size={14} /> 삭제
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                    {post.content}
+                  </p>
+
+                  {/* 📷 첨부된 사진 표시 */}
+                  {post.image_url && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <a href={post.image_url} target="_blank" rel="noopener noreferrer">
+                        <img 
+                          src={post.image_url} 
+                          alt="게시글 첨부 사진" 
+                          style={{ maxWidth: '100%', maxHeight: '360px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'cover' }} 
+                        />
+                      </a>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <User size={13} /> {post.author_name}
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={13} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
+                    </span>
                   </div>
                 </div>
-
-                <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
-                  {post.content}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <User size={13} /> {post.author_name}
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Clock size={13} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
-                  </span>
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </section>
