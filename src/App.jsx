@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 URL
 const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
@@ -231,7 +231,6 @@ export default function App() {
     }
   }
 
-  // 💖 좋아요 On/Off 토글 기능
   const handleLikePost = async (postId, currentLikes) => {
     if (!session) {
       alert('로그인이 필요한 기능입니다!')
@@ -243,7 +242,6 @@ export default function App() {
       ? Math.max(0, (currentLikes || 0) - 1) 
       : (currentLikes || 0) + 1
 
-    // 1. 좋아요 눌린 목록 업데이트 & localStorage 저장
     const updatedLikedIds = isAlreadyLiked
       ? likedPostIds.filter((id) => id !== postId)
       : [...likedPostIds, postId]
@@ -255,7 +253,6 @@ export default function App() {
       console.error('localStorage 저장 실패:', err)
     }
 
-    // 2. DB 카운트 업데이트
     const { error } = await supabase
       .from('posts')
       .update({ likes: newLikesCount })
@@ -375,20 +372,7 @@ export default function App() {
         )}
       </header>
 
-      {/* 2. 스승 랏코 배너 */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <ShieldCheck size={40} color="#d97706" />
-          <div>
-            <h3 style={{ margin: '0 0 4px 0', color: '#92400e' }}>스승 랏코의 수련장에 오신 것을 환영합니다!</h3>
-            <p style={{ margin: 0, color: '#b45309', fontSize: '14px' }}>
-              디스코드 채널에서 활발히 소통하고 제초 수련을 통해 소속 팀의 순위를 올려보세요.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. 팀 순위 리더보드 */}
+      {/* 2. 팀 순위 리더보드 */}
       <section className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -447,7 +431,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* 4. 오늘의 제초 수련 미니게임 */}
+      {/* 3. 오늘의 제초 수련 미니게임 */}
       <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
@@ -470,7 +454,7 @@ export default function App() {
         )}
       </section>
 
-      {/* 5. 팀 커뮤니티 & 수다 게시판 */}
+      {/* 4. 팀 커뮤니티 & 수다 게시판 */}
       <section className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -652,7 +636,6 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {/* 💖 좋아요 On/Off 토글 버튼 */}
                       <button 
                         type="button"
                         onClick={() => handleLikePost(post.id, post.likes)}
