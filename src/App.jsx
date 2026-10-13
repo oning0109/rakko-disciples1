@@ -3,17 +3,16 @@ import { supabase } from './supabaseClient'
 import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 URL
-const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
+const RAKKO_MASTER_IMAGE = '/rakko.png'
 
-// 종족(팀) ID별 대표 캐릭터 및 이름 매핑
 const TEAM_CONFIG = {
-  rakko: { name: '랏코', image: RAKKO_MASTER_IMAGE },
-  chiikawa: { name: '치이카와', image: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp' },
-  hachiware: { name: '하치와레', image: 'https://i.namu.wiki/i/mqiv0Rb5tbt2C3cCkJCMV_NCeX7YCFfXpYUIebD5_gyietmJewBWlY7uBnyWCHP92ZNY-uIJtNhpuKbyAP40HA.webp' },
-  usagi: { name: '우사기', image: 'https://i.namu.wiki/i/PJL_NmmYcz0IvJbqzwprwPbDN_X-bdmBEMAvlc2XZrxUu0crrWUdNV6eZ4_6cUz4CjXrnl4_xtSLGHvRnAEBBA.webp' },
-  momonga: { name: '모몽가', image: 'https://i.namu.wiki/i/m3vvkdjvU71l5ryX3GHeQz-t-39twY_SSmfUZGCnufTadOJBpMQhciMnQen0H8aufzkW8I13kRGBYJyI9UiYxw.webp' },
-  kurimanju: { name: '크리만쥬', image: 'https://i.namu.wiki/i/A-umWeRuPvy8wgp0raNVjoDASW6dyP_MTF58AMWMJjUwm2mJQyUwi7NWbuRcWPwZu5PhUgVbJK-Bb0u2A47ccg.webp' },
-  shisa: { name: '시사', image: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp' },
+  rakko: { name: '랏코', image: '/rakko.png' },
+  chiikawa: { name: '치이카와', image: '/chiikawa.png' },
+  hachiware: { name: '하치와레', image: '/hachiware.png' },
+  usagi: { name: '우사기', image: '/usagi.png' },
+  momonga: { name: '모몽가', image: '/momonga.png' },
+  kurimanju: { name: '크리만쥬', image: '/kurimanju.png' },
+  shisa: { name: '시사', image: '/shisa.png' },
 }
 
 // 🔮 랏코 스승의 운세 목록 데이터
