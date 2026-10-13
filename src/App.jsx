@@ -59,6 +59,33 @@ const getHighestOwMMR = (profile) => {
   return `${highest.name} ${highest.score} pt`
 }
 
+// 📅 날짜 문자열에서 'MM-DD' (예: '05-05', '11-05')만 안전하게 추출하는 함수
+const getMMDD = (dateStr) => {
+  if (!dateStr) return ''
+  const clean = String(dateStr).split('T')[0].split(' ')[0].trim()
+  const parts = clean.split('-')
+  if (parts.length >= 2) {
+    const m = parts[parts.length - 2].padStart(2, '0')
+    const d = parts[parts.length - 1].padStart(2, '0')
+    return `${m}-${d}`
+  }
+  return ''
+}
+
+// 📅 일정 날짜 비교 판별 함수 (생일은 연도 무시 MM-DD 비교, 일반 일정은 YYYY-MM-DD 완벽 일치)
+const isScheduleForDate = (schedule, targetDateStr) => {
+  if (!schedule || !schedule.event_date) return false
+  
+  const isBirthday = schedule.category && schedule.category.includes('생일')
+  if (isBirthday) {
+    return getMMDD(schedule.event_date) === getMMDD(targetDateStr)
+  }
+  
+  const cleanEventDate = String(schedule.event_date).split('T')[0].split(' ')[0].trim()
+  const cleanTargetDate = String(targetDateStr).split('T')[0].split(' ')[0].trim()
+  return cleanEventDate === cleanTargetDate
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community' | 'calendar'
@@ -1480,7 +1507,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📅 [PAGE 4] 일정 달력 탭 (생일 MM-DD 비교 및 연동 보수) */}
+      {/* 📅 [PAGE 4] 일정 달력 탭 (안전한 MM-DD 비교 로직 적용) */}
       {/* ========================================================= */}
       {activeTab === 'calendar' && (
         <section className="card" style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0' }}>
@@ -1513,17 +1540,8 @@ export default function App() {
               const dayNum = i + 1
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
               
-              // 💡 생일은 연도 제외 MM-DD 비교, 일반 일정은 YYYY-MM-DD 완벽 일치 비교
-              const daySchedules = schedules.filter((s) => {
-                if (!s.event_date) return false
-                if (s.category === '생일') {
-                  const scheduleMMDD = s.event_date.length >= 5 ? s.event_date.slice(-5) : s.event_date
-                  const currentMMDD = dateStr.slice(-5)
-                  return scheduleMMDD === currentMMDD
-                }
-                return s.event_date === dateStr
-              })
-
+              // 💡 정제 함수를 이용해 생일 및 일반 일정 비교
+              const daySchedules = schedules.filter((s) => isScheduleForDate(s, dateStr))
               const isSelected = selectedDateStr === dateStr
 
               return (
@@ -1582,27 +1600,11 @@ export default function App() {
               📌 {selectedDateStr} 일정 상세
             </h3>
 
-            {schedules.filter((s) => {
-              if (!s.event_date) return false
-              if (s.category === '생일') {
-                const scheduleMMDD = s.event_date.length >= 5 ? s.event_date.slice(-5) : s.event_date
-                const selectedMMDD = selectedDateStr.slice(-5)
-                return scheduleMMDD === selectedMMDD
-              }
-              return s.event_date === selectedDateStr
-            }).length === 0 ? (
+            {schedules.filter((s) => isScheduleForDate(s, selectedDateStr)).length === 0 ? (
               <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>등록된 일정이 없습니다.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {schedules.filter((s) => {
-                  if (!s.event_date) return false
-                  if (s.category === '생일') {
-                    const scheduleMMDD = s.event_date.length >= 5 ? s.event_date.slice(-5) : s.event_date
-                    const selectedMMDD = selectedDateStr.slice(-5)
-                    return scheduleMMDD === selectedMMDD
-                  }
-                  return s.event_date === selectedDateStr
-                }).map((sch) => (
+                {schedules.filter((s) => isScheduleForDate(s, selectedDateStr)).map((sch) => (
                   <div
                     key={sch.id}
                     style={{
