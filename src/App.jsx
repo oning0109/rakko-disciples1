@@ -1,27 +1,28 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Zap } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 URL
-const RAKKO_MASTER_IMAGE = '/rakko.png'
+const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
 
+// 종족(팀) ID별 대표 캐릭터 및 이름 매핑
 const TEAM_CONFIG = {
-  rakko: { name: '랏코', image: '/rakko.png' },
-  chiikawa: { name: '치이카와', image: '/chiikawa.png' },
-  hachiware: { name: '하치와레', image: '/hachiware.png' },
-  usagi: { name: '우사기', image: '/usagi.png' },
-  momonga: { name: '모몽가', image: '/momonga.png' },
-  kurimanju: { name: '크리만쥬', image: '/kurimanju.png' },
-  shisa: { name: '시사', image: '/shisa.png' },
+  rakko: { name: '랏코', image: RAKKO_MASTER_IMAGE },
+  chiikawa: { name: '치이카와', image: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp' },
+  hachiware: { name: '하치와레', image: 'https://i.namu.wiki/i/mqiv0Rb5tbt2C3cCkJCMV_NCeX7YCFfXpYUIebD5_gyietmJewBWlY7uBnyWCHP92ZNY-uIJtNhpuKbyAP40HA.webp' },
+  usagi: { name: '우사기', image: 'https://i.namu.wiki/i/PJL_NmmYcz0IvJbqzwprwPbDN_X-bdmBEMAvlc2XZrxUu0crrWUdNV6eZ4_6cUz4CjXrnl4_xtSLGHvRnAEBBA.webp' },
+  momonga: { name: '모몽가', image: 'https://i.namu.wiki/i/m3vvkdjvU71l5ryX3GHeQz-t-39twY_SSmfUZGCnufTadOJBpMQhciMnQen0H8aufzkW8I13kRGBYJyI9UiYxw.webp' },
+  kurimanju: { name: '크리만쥬', image: 'https://i.namu.wiki/i/A-umWeRuPvy8wgp0raNVjoDASW6dyP_MTF58AMWMJjUwm2mJQyUwi7NWbuRcWPwZu5PhUgVbJK-Bb0u2A47ccg.webp' },
+  shisa: { name: '시사', image: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp' },
 }
 
 // 🔮 랏코 스승의 운세 목록 데이터
 const FORTUNES = [
-  { grade: '대길 🌟', quote: '좋은 기운이 가득하니 오늘 토벌은 문제없겠군. 방심하지 말고 시야를 넓혀 마음껏 나아가라.', points: 5 },
-  { grade: '중길 ⚔️', quote: '순조로운 흐름이다, 초조해할 것 없다. 네 속도대로 묵묵히 하다 보면 좋은 상을 받게 될 거다.', points: 3 },
-  { grade: '소길 🍨', quote: '나쁘지 않은 운세군, 기본을 다지기에 딱 좋은 날이다. 평소처럼만 하면 소소한 행운이 따를 거다.', points: 2 },
-  { grade: '평길 🍵', quote: '잔잔하고 평온한 하루가 되겠군. 무리하지 말고 오늘은 브로콜리라도 먹으며 체력을 길러라.', points: 1 },
-  { grade: '말길 🍃', quote: '운세가 조금 아쉽지만 고개 숙일 필요 없다. 위험한 일이 생기면 언제든 내 뒤로 물러서라.', points: 1 },
+  { grade: '대길 🌟', quote: '오늘 너의 검 끝은 매섭군! 무슨 일이든 당당하게 임하라.', points: 5 },
+  { grade: '중길 ⚔️', quote: '기본 자세가 제일 중요하다. 방심하지 마라!', points: 3 },
+  { grade: '소길 🍨', quote: '달콤한 파르페를 먹으면 오늘은 기분 좋은 일이 생길 것이다.', points: 2 },
+  { grade: '평길 🍵', quote: '쉬는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
+  { grade: '말길 🍃', quote: '과자는 적당히 먹고, 제초 수련부터 차근차근 시작해라.', points: 1 },
 ]
 
 export default function App() {
@@ -34,6 +35,13 @@ export default function App() {
   // 🔮 오늘의 운세 관련 상태
   const [todayFortune, setTodayFortune] = useState(null)
   const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
+
+  // 🗡️ 오늘의 토벌 수련 관련 상태
+  const [subjugationStatus, setSubjugationStatus] = useState('idle') // 'idle' | 'waiting' | 'ready' | 'finished'
+  const [hasDoneSubjugation, setHasDoneSubjugation] = useState(false)
+  const [subjugationResult, setSubjugationResult] = useState(null)
+  const [monsterStartTime, setMonsterStartTime] = useState(null)
+  const [subjugationTimer, setSubjugationTimer] = useState(null)
 
   // 게시판 관련 상태
   const [posts, setPosts] = useState([])
@@ -64,16 +72,23 @@ export default function App() {
   })
 
   useEffect(() => {
-    // 오늘 날짜 기준 운세 결과 로드
     const todayStr = new Date().toISOString().slice(0, 10)
+
+    // 운세 로드
     const savedFortuneDate = localStorage.getItem('rakko_fortune_date')
     const savedFortuneData = localStorage.getItem('rakko_fortune_data')
-
     if (savedFortuneDate === todayStr && savedFortuneData) {
       setHasDrawnFortune(true)
-      try {
-        setTodayFortune(JSON.parse(savedFortuneData))
-      } catch {}
+      try { setTodayFortune(JSON.parse(savedFortuneData)) } catch {}
+    }
+
+    // 토벌 데이터 로드
+    const savedSubDate = localStorage.getItem('rakko_sub_date')
+    const savedSubData = localStorage.getItem('rakko_sub_data')
+    if (savedSubDate === todayStr && savedSubData) {
+      setHasDoneSubjugation(true)
+      setSubjugationStatus('finished')
+      try { setSubjugationResult(JSON.parse(savedSubData)) } catch {}
     }
 
     const syncUserProfile = async (currentSession) => {
@@ -155,7 +170,7 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 🔮 랏코 스승의 오늘의 운세 뽑기 기능
+  // 🔮 랏코 스승의 오늘의 운세 뽑기
   const handleDrawFortune = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -168,16 +183,13 @@ export default function App() {
       return
     }
 
-    // 랜덤 운세 추첨
     const randomFortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)]
     
-    // 상태 및 localStorage 기록
     setTodayFortune(randomFortune)
     setHasDrawnFortune(true)
     localStorage.setItem('rakko_fortune_date', todayStr)
     localStorage.setItem('rakko_fortune_data', JSON.stringify(randomFortune))
 
-    // 팀 점수 및 개인 포인트 반영
     try {
       const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
       const { data: profile } = await supabase
@@ -203,6 +215,87 @@ export default function App() {
       }
     } catch (err) {
       console.error('운세 포인트 반영 중 오류 발생:', err)
+    }
+  }
+
+  // 🗡️ 토벌 수련 시작 (준비 단계)
+  const handleStartSubjugation = () => {
+    if (!session) {
+      alert('로그인이 필요한 수련입니다!')
+      return
+    }
+    if (hasDoneSubjugation) {
+      alert('오늘의 토벌 수련은 이미 완료하셨습니다! 내일 다시 도전해 주세요.')
+      return
+    }
+
+    setSubjugationStatus('waiting')
+    const randomDelay = Math.floor(Math.random() * 2000) + 1500 // 1.5초~3.5초 지연
+
+    const timer = setTimeout(() => {
+      setSubjugationStatus('ready')
+      setMonsterStartTime(Date.now())
+    }, randomDelay)
+
+    setSubjugationTimer(timer)
+  }
+
+  // 🗡️ 몬스터 클릭 (순발력 측정)
+  const handleMonsterClick = async () => {
+    if (subjugationStatus === 'waiting') {
+      clearTimeout(subjugationTimer)
+      alert('⚠️ 몬스터가 나타나기 전에 너무 일찍 공격했습니다! 수련을 다시 시작해 주세요.')
+      setSubjugationStatus('idle')
+      return
+    }
+
+    if (subjugationStatus === 'ready') {
+      const reactionTime = Date.now() - monsterStartTime
+      let result = { reactionTime, grade: 'C급 🍃', points: 1 }
+
+      if (reactionTime < 250) {
+        result = { reactionTime, grade: 'S급 🗡️', points: 10 }
+      } else if (reactionTime < 350) {
+        result = { reactionTime, grade: 'A급 ⚔️', points: 5 }
+      } else if (reactionTime < 500) {
+        result = { reactionTime, grade: 'B급 🛡️', points: 3 }
+      }
+
+      setSubjugationResult(result)
+      setSubjugationStatus('finished')
+      setHasDoneSubjugation(true)
+
+      const todayStr = new Date().toISOString().slice(0, 10)
+      localStorage.setItem('rakko_sub_date', todayStr)
+      localStorage.setItem('rakko_sub_data', JSON.stringify(result))
+
+      // 팀 점수 반영
+      try {
+        const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('team_id')
+          .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
+          .maybeSingle()
+
+        if (profile && profile.team_id) {
+          const targetTeam = profile.team_id
+          const { data: teamData } = await supabase
+            .from('team_scores')
+            .select('total_points')
+            .eq('team_id', targetTeam)
+            .maybeSingle()
+
+          if (teamData) {
+            const newPoints = (teamData.total_points || 0) + result.points
+            await supabase.from('team_scores').update({ total_points: newPoints }).eq('team_id', targetTeam)
+            setUserPoints((prev) => prev + result.points)
+            fetchTeamScores()
+          }
+        }
+      } catch (err) {
+        console.error('토벌 점수 반영 중 오류 발생:', err)
+      }
     }
   }
 
@@ -532,7 +625,7 @@ export default function App() {
         )}
       </header>
 
-      {/* 🌟 2. 메인 네비게이션 탭 (페이지 구분) */}
+      {/* 2. 메인 네비게이션 탭 */}
       <nav style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
         <button
           type="button"
@@ -582,12 +675,12 @@ export default function App() {
       </nav>
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 1] 메인 대시보드 (리더보드 + 제초 + 오늘의 운세) */}
+      {/* 📄 [PAGE 1] 메인 대시보드 */}
       {/* ========================================================= */}
       {activeTab === 'home' && (
         <>
           {/* 🔮 랏코 스승의 오늘의 운세 위젯 */}
-          <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '24px' }}>
+          <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -617,7 +710,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* 뽑은 운세 결과 표시 */}
             {todayFortune && (
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fcd34d', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '14px', fontWeight: '800', padding: '4px 10px', borderRadius: '12px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
@@ -628,6 +720,95 @@ export default function App() {
                 </p>
                 <span style={{ fontSize: '13px', fontWeight: '700', color: '#d97706' }}>
                   +{todayFortune.points} pt 획득
+                </span>
+              </div>
+            )}
+          </section>
+
+          {/* 🗡️ 오늘의 토벌 수련 (3초 순발력 미니게임) */}
+          <section className="card" style={{ background: '#fef2f2', borderColor: '#fecdd3', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Target color="#dc2626" size={20} /> 🗡️ 오늘의 토벌 수련 (1일 1회)
+                </h2>
+                <p style={{ margin: 0, color: '#b91c1c', fontSize: '14px' }}>
+                  몬스터가 나타나면 가장 빠르게 클릭하세요! 순발력에 따라 포인트가 지급됩니다.
+                </p>
+              </div>
+
+              {subjugationStatus === 'idle' && (
+                <button
+                  type="button"
+                  onClick={handleStartSubjugation}
+                  disabled={hasDoneSubjugation}
+                  style={{
+                    background: hasDoneSubjugation ? '#cbd5e1' : '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '14px',
+                    cursor: hasDoneSubjugation ? 'default' : 'pointer'
+                  }}
+                >
+                  {hasDoneSubjugation ? '토벌 완료' : '토벌 시작 🗡️'}
+                </button>
+              )}
+            </div>
+
+            {/* 미니게임 진행 대화상자/클릭 영역 */}
+            {subjugationStatus === 'waiting' && (
+              <div 
+                onClick={handleMonsterClick}
+                style={{
+                  background: '#fee2e2',
+                  border: '2px dashed #f87171',
+                  padding: '24px',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#991b1b' }}>
+                  👀 기회를 노리는 중... 몬스터가 나타날 때까지 기다리세요! (너무 일찍 누르면 실패)
+                </p>
+              </div>
+            )}
+
+            {subjugationStatus === 'ready' && (
+              <div 
+                onClick={handleMonsterClick}
+                style={{
+                  background: '#ef4444',
+                  padding: '28px',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  boxShadow: '0 0 16px rgba(239,68,68,0.5)',
+                  animation: 'pulse 0.5s infinite'
+                }}
+              >
+                <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  👾 몬스터 출현! 지금 바로 클릭하세요!!!
+                </p>
+              </div>
+            )}
+
+            {subjugationStatus === 'finished' && subjugationResult && (
+              <div style={{ background: '#fff', padding: '14px 18px', borderRadius: '12px', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '800', padding: '4px 10px', borderRadius: '12px', background: '#fee2e2', color: '#991b1b' }}>
+                    {subjugationResult.grade}
+                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#334155' }}>
+                    반응 속도: <b>{subjugationResult.reactionTime} ms</b>
+                  </span>
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: '800', color: '#dc2626' }}>
+                  +{subjugationResult.points} pt 획득
                 </span>
               </div>
             )}
@@ -718,7 +899,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 2] 팀 커뮤니티 (게시판 + 사진 업로드 + 댓글) */}
+      {/* 📄 [PAGE 2] 팀 커뮤니티 */}
       {/* ========================================================= */}
       {activeTab === 'community' && (
         <section className="card">
