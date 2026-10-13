@@ -32,10 +32,10 @@ const FORTUNES = [
 
 // 🏅 포인트 구간별 자동 칭호 산정 함수
 const getTitleByPoints = (points = 0) => {
-  if (points >= 200) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
-  if (points >= 100) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
-  if (points >= 50) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
-  if (points >= 20) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
+  if (points >= 20000) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
+  if (points >= 10000) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
+  if (points >= 5000) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
+  if (points >= 2000) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
   return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
 }
 
