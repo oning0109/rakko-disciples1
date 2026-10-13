@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 URL
 const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
@@ -16,10 +16,25 @@ const TEAM_CONFIG = {
   shisa: { name: '시사', image: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp' },
 }
 
+// 🔮 랏코 스승의 운세 목록 데이터
+const FORTUNES = [
+  { grade: '대길 🌟', quote: '오늘 너의 검 끝은 매섭군! 무슨 일이든 당당하게 임하라.', points: 5 },
+  { grade: '중길 ⚔️', quote: '기본 자세가 제일 중요하다. 방심하지 마라!', points: 3 },
+  { grade: '소길 🍨', quote: '달콤한 파르페를 먹으면 오늘은 기분 좋은 일이 생길 것이다.', points: 2 },
+  { grade: '평길 🍵', quote: '쉬는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
+  { grade: '말길 🍃', quote: '과자는 적당히 먹고, 제초 수련부터 차근차근 시작해라.', points: 1 },
+]
+
 export default function App() {
   const [session, setSession] = useState(null)
+  const [activeTab, setActiveTab] = useState('home') // 'home' | 'community'
+
   const [teams, setTeams] = useState([])
   const [userPoints, setUserPoints] = useState(0)
+
+  // 🔮 오늘의 운세 관련 상태
+  const [todayFortune, setTodayFortune] = useState(null)
+  const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
 
   // 게시판 관련 상태
   const [posts, setPosts] = useState([])
@@ -35,9 +50,9 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // 💬 댓글 관련 상태
-  const [expandedPostIds, setExpandedPostIds] = useState([]) // 펼쳐진 게시글 ID 목록
-  const [commentsMap, setCommentsMap] = useState({}) // { [postId]: [comments...] }
-  const [commentInputs, setCommentInputs] = useState({}) // { [postId]: "입력 내용" }
+  const [expandedPostIds, setExpandedPostIds] = useState([])
+  const [commentsMap, setCommentsMap] = useState({})
+  const [commentInputs, setCommentInputs] = useState({})
 
   // 💖 좋아요 누른 게시글 ID 목록 (localStorage 연동)
   const [likedPostIds, setLikedPostIds] = useState(() => {
@@ -50,6 +65,18 @@ export default function App() {
   })
 
   useEffect(() => {
+    // 오늘 날짜 기준 운세 결과 로드
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const savedFortuneDate = localStorage.getItem('rakko_fortune_date')
+    const savedFortuneData = localStorage.getItem('rakko_fortune_data')
+
+    if (savedFortuneDate === todayStr && savedFortuneData) {
+      setHasDrawnFortune(true)
+      try {
+        setTodayFortune(JSON.parse(savedFortuneData))
+      } catch {}
+    }
+
     const syncUserProfile = async (currentSession) => {
       if (!currentSession?.user) return
 
@@ -121,7 +148,6 @@ export default function App() {
     if (!error && data) setTeams(data)
   }
 
-  // 게시글 및 댓글 수 함께 조회
   const fetchPosts = async () => {
     const { data, error } = await supabase
       .from('posts')
@@ -130,7 +156,57 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 특정 게시글의 댓글 목록 불러오기
+  // 🔮 랏코 스승의 오늘의 운세 뽑기 기능
+  const handleDrawFortune = async () => {
+    if (!session) {
+      alert('로그인이 필요한 수련입니다!')
+      return
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10)
+    if (hasDrawnFortune) {
+      alert('오늘의 운세는 이미 뽑으셨습니다! 내일 다시 도전해 주세요.')
+      return
+    }
+
+    // 랜덤 운세 추첨
+    const randomFortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)]
+    
+    // 상태 및 localStorage 기록
+    setTodayFortune(randomFortune)
+    setHasDrawnFortune(true)
+    localStorage.setItem('rakko_fortune_date', todayStr)
+    localStorage.setItem('rakko_fortune_data', JSON.stringify(randomFortune))
+
+    // 팀 점수 및 개인 포인트 반영
+    try {
+      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('team_id')
+        .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
+        .maybeSingle()
+
+      if (profile && profile.team_id) {
+        const targetTeam = profile.team_id
+        const { data: teamData } = await supabase
+          .from('team_scores')
+          .select('total_points')
+          .eq('team_id', targetTeam)
+          .maybeSingle()
+
+        if (teamData) {
+          const newPoints = (teamData.total_points || 0) + randomFortune.points
+          await supabase.from('team_scores').update({ total_points: newPoints }).eq('team_id', targetTeam)
+          setUserPoints((prev) => prev + randomFortune.points)
+          fetchTeamScores()
+        }
+      }
+    } catch (err) {
+      console.error('운세 포인트 반영 중 오류 발생:', err)
+    }
+  }
+
   const fetchCommentsForPost = async (postId) => {
     const { data, error } = await supabase
       .from('comments')
@@ -143,7 +219,6 @@ export default function App() {
     }
   }
 
-  // 댓글 창 펼치기 / 접기
   const toggleComments = (postId) => {
     if (expandedPostIds.includes(postId)) {
       setExpandedPostIds(expandedPostIds.filter((id) => id !== postId))
@@ -153,7 +228,6 @@ export default function App() {
     }
   }
 
-  // 댓글 작성
   const handleCreateComment = async (postId, e) => {
     e.preventDefault()
     if (!session) {
@@ -185,11 +259,10 @@ export default function App() {
     } else {
       setCommentInputs((prev) => ({ ...prev, [postId]: '' }))
       fetchCommentsForPost(postId)
-      fetchPosts() // 댓글 수 갱신
+      fetchPosts()
     }
   }
 
-  // 댓글 삭제
   const handleDeleteComment = async (commentId, postId, commentUserId) => {
     if (!session) return
     if (session.user.id !== commentUserId) {
@@ -421,7 +494,7 @@ export default function App() {
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '32px 20px' }}>
       {/* 1. 상단 프로필 & 헤더 */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img 
             src={RAKKO_MASTER_IMAGE} 
@@ -460,130 +533,214 @@ export default function App() {
         )}
       </header>
 
-      {/* 2. 팀 순위 리더보드 */}
-      <section className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Trophy color="#f59e0b" size={22} /> 종족별 팀 순위
-          </h2>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: '#f3f4f6', padding: '4px 8px', borderRadius: '6px' }}>
-            실시간 자동 집계
-          </span>
-        </div>
+      {/* 🌟 2. 메인 네비게이션 탭 (페이지 구분) */}
+      <nav style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('home')}
+          style={{
+            flex: 1,
+            padding: '12px',
+            borderRadius: '12px',
+            border: activeTab === 'home' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+            background: activeTab === 'home' ? '#eff6ff' : '#fff',
+            color: activeTab === 'home' ? '#1d4ed8' : '#64748b',
+            fontWeight: '700',
+            fontSize: '15px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <LayoutDashboard size={18} /> 메인 대시보드
+        </button>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {teams.map((team, index) => (
-            <div 
-              key={team.team_id} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                padding: '14px 18px', 
-                backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
-                borderRadius: '12px',
-                border: '1px solid #f1f5f9'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
-                  {index + 1}
-                </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('community')}
+          style={{
+            flex: 1,
+            padding: '12px',
+            borderRadius: '12px',
+            border: activeTab === 'community' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+            background: activeTab === 'community' ? '#eff6ff' : '#fff',
+            color: activeTab === 'community' ? '#1d4ed8' : '#64748b',
+            fontWeight: '700',
+            fontSize: '15px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <MessageSquare size={18} /> 팀 커뮤니티
+        </button>
+      </nav>
 
-                <img 
-                  src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
-                  alt={team.team_name} 
-                  style={{ 
-                    width: '36px', 
-                    height: '36px', 
-                    borderRadius: '50%', 
-                    border: '2px solid #e2e8f0',
-                    objectFit: 'cover',
-                    backgroundColor: '#fff'
-                  }} 
-                />
-
-                <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
+      {/* ========================================================= */}
+      {/* 📄 [PAGE 1] 메인 대시보드 (리더보드 + 제초 + 오늘의 운세) */}
+      {/* ========================================================= */}
+      {activeTab === 'home' && (
+        <>
+          {/* 🔮 랏코 스승의 오늘의 운세 위젯 */}
+          <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Gift color="#d97706" size={20} /> 🔮 랏코 스승의 오늘의 한마디 & 운세
+                </h2>
+                <p style={{ margin: 0, color: '#b45309', fontSize: '14px' }}>
+                  하루에 한 번 스승 랏코의 수련 지침과 함께 보너스 점수를 획득하세요!
+                </p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
-                <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <MessageSquare size={14}/> {team.weekly_chats || 0}회
-                </span>
-                <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
-                  {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={handleDrawFortune}
+                disabled={hasDrawnFortune}
+                style={{
+                  background: hasDrawnFortune ? '#cbd5e1' : '#d97706',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 16px',
+                  borderRadius: '10px',
+                  fontWeight: '700',
+                  fontSize: '14px',
+                  cursor: hasDrawnFortune ? 'default' : 'pointer'
+                }}
+              >
+                {hasDrawnFortune ? '오늘 뽑기 완료' : '운세 뽑기 🥠'}
+              </button>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* 3. 오늘의 제초 수련 미니게임 */}
-      <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles color="#16a34a" size={20} /> 🌱 오늘의 제초 수련
+            {/* 뽑은 운세 결과 표시 */}
+            {todayFortune && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fcd34d', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '14px', fontWeight: '800', padding: '4px 10px', borderRadius: '12px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                  {todayFortune.grade}
+                </span>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#78350f', flex: 1 }}>
+                  "{todayFortune.quote}"
+                </p>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#d97706' }}>
+                  +{todayFortune.points} pt 획득
+                </span>
+              </div>
+            )}
+          </section>
+
+          {/* 팀 순위 리더보드 */}
+          <section className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trophy color="#f59e0b" size={22} /> 종족별 팀 순위
+              </h2>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: '#f3f4f6', padding: '4px 8px', borderRadius: '6px' }}>
+                실시간 자동 집계
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {teams.map((team, index) => (
+                <div 
+                  key={team.team_id} 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '14px 18px', 
+                    backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
+                    borderRadius: '12px',
+                    border: '1px solid #f1f5f9'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
+                      {index + 1}
+                    </div>
+
+                    <img 
+                      src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
+                      alt={team.team_name} 
+                      style={{ 
+                        width: '36px', 
+                        height: '36px', 
+                        borderRadius: '50%', 
+                        border: '2px solid #e2e8f0',
+                        objectFit: 'cover',
+                        backgroundColor: '#fff'
+                      }} 
+                    />
+
+                    <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <MessageSquare size={14}/> {team.weekly_chats || 0}회
+                    </span>
+                    <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
+                      {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 오늘의 제초 수련 미니게임 */}
+          <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles color="#16a34a" size={20} /> 🌱 오늘의 제초 수련
+                </h2>
+                <p style={{ margin: 0, color: '#15803d', fontSize: '14px' }}>
+                  잡초를 뽑아 획득한 포인트는 소속 팀의 총점에 누적됩니다.
+                </p>
+              </div>
+              <button onClick={handleWeeding} className="btn-weed">
+                <Flame size={18} /> 잡초 뽑기 (+2 pt)
+              </button>
+            </div>
+
+            {session && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '14px' }}>
+                현재 세션 누적 포인트: <b>{userPoints}</b> pt
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {/* ========================================================= */}
+      {/* 📄 [PAGE 2] 팀 커뮤니티 (게시판 + 사진 업로드 + 댓글) */}
+      {/* ========================================================= */}
+      {activeTab === 'community' && (
+        <section className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MessageSquare color="#3b82f6" size={22} /> 💬 제자 마을 팀 커뮤니티
             </h2>
-            <p style={{ margin: 0, color: '#15803d', fontSize: '14px' }}>
-              잡초를 뽑아 획득한 포인트는 소속 팀의 총점에 누적됩니다.
-            </p>
           </div>
-          <button onClick={handleWeeding} className="btn-weed">
-            <Flame size={18} /> 잡초 뽑기 (+2 pt)
-          </button>
-        </div>
 
-        {session && (
-          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '14px' }}>
-            현재 세션 누적 포인트: <b>{userPoints}</b> pt
-          </div>
-        )}
-      </section>
-
-      {/* 4. 팀 커뮤니티 & 수다 게시판 */}
-      <section className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <MessageSquare color="#3b82f6" size={22} /> 💬 제자 마을 팀 커뮤니티
-          </h2>
-        </div>
-
-        {/* 팀별 필터 탭 */}
-        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '16px' }}>
-          <button
-            type="button"
-            onClick={() => setSelectedTeamFilter('all')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '20px',
-              border: 'none',
-              background: selectedTeamFilter === 'all' ? '#3b82f6' : '#f1f5f9',
-              color: selectedTeamFilter === 'all' ? '#fff' : '#475569',
-              fontWeight: '600',
-              fontSize: '13px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Users size={14} /> 전체보기
-          </button>
-          {Object.entries(TEAM_CONFIG).map(([id, info]) => (
+          {/* 팀별 필터 탭 */}
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '16px' }}>
             <button
               type="button"
-              key={id}
-              onClick={() => setSelectedTeamFilter(id)}
+              onClick={() => setSelectedTeamFilter('all')}
               style={{
                 padding: '6px 14px',
                 borderRadius: '20px',
-                border: selectedTeamFilter === id ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-                background: selectedTeamFilter === id ? '#eff6ff' : '#fff',
-                color: selectedTeamFilter === id ? '#1d4ed8' : '#334155',
-                fontWeight: selectedTeamFilter === id ? '700' : '500',
+                border: 'none',
+                background: selectedTeamFilter === 'all' ? '#3b82f6' : '#f1f5f9',
+                color: selectedTeamFilter === 'all' ? '#fff' : '#475569',
+                fontWeight: '600',
                 fontSize: '13px',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
@@ -592,295 +749,316 @@ export default function App() {
                 gap: '6px'
               }}
             >
-              <img src={info.image} alt={info.name} style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
-              {info.name}
+              <Users size={14} /> 전체보기
             </button>
-          ))}
-        </div>
-
-        {/* 글 작성 폼 */}
-        <form onSubmit={handleCreatePost} style={{ marginBottom: '24px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-            <select 
-              value={postTeam} 
-              onChange={(e) => setPostTeam(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff', fontWeight: '600' }}
-            >
-              {Object.entries(TEAM_CONFIG).map(([id, info]) => (
-                <option key={id} value={id}>[{info.name}] 게시판</option>
-              ))}
-            </select>
-
-            <select 
-              value={newCategory} 
-              onChange={(e) => setNewCategory(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff' }}
-            >
-              <option value="자유">자유</option>
-              <option value="수련인증">수련인증</option>
-              <option value="질문">질문</option>
-            </select>
-
-            <input 
-              type="text" 
-              placeholder={session ? "제목을 입력하세요" : "로그인 후 글을 쓸 수 있습니다"}
-              value={newTitle}
-              disabled={!session || isSubmitting}
-              onChange={(e) => setNewTitle(e.target.value)}
-              style={{ flex: 1, minWidth: '200px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-            />
-          </div>
-
-          <textarea 
-            placeholder={session ? "팀원들과 나누고 싶은 이야기나 인증할 사진을 올려보세요..." : "로그인 후 이야기를 나누어 보세요!"}
-            value={newContent}
-            disabled={!session || isSubmitting}
-            onChange={(e) => setNewContent(e.target.value)}
-            rows={3}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' }}
-          />
-
-          {imagePreview && (
-            <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
-              <img 
-                src={imagePreview} 
-                alt="업로드 미리보기" 
-                style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
-              />
+            {Object.entries(TEAM_CONFIG).map(([id, info]) => (
               <button
                 type="button"
-                onClick={handleRemoveImage}
+                key={id}
+                onClick={() => setSelectedTeamFilter(id)}
                 style={{
-                  position: 'absolute',
-                  top: '-6px',
-                  right: '-6px',
-                  background: '#ef4444',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '22px',
-                  height: '22px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: selectedTeamFilter === id ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                  background: selectedTeamFilter === id ? '#eff6ff' : '#fff',
+                  color: selectedTeamFilter === id ? '#1d4ed8' : '#334155',
+                  fontWeight: selectedTeamFilter === id ? '700' : '500',
+                  fontSize: '13px',
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  gap: '6px'
                 }}
               >
-                <X size={14} />
+                <img src={info.image} alt={info.name} style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
+                {info.name}
+              </button>
+            ))}
+          </div>
+
+          {/* 글 작성 폼 */}
+          <form onSubmit={handleCreatePost} style={{ marginBottom: '24px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <select 
+                value={postTeam} 
+                onChange={(e) => setPostTeam(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff', fontWeight: '600' }}
+              >
+                {Object.entries(TEAM_CONFIG).map(([id, info]) => (
+                  <option key={id} value={id}>[{info.name}] 게시판</option>
+                ))}
+              </select>
+
+              <select 
+                value={newCategory} 
+                onChange={(e) => setNewCategory(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', background: '#fff' }}
+              >
+                <option value="자유">자유</option>
+                <option value="수련인증">수련인증</option>
+                <option value="질문">질문</option>
+              </select>
+
+              <input 
+                type="text" 
+                placeholder={session ? "제목을 입력하세요" : "로그인 후 글을 쓸 수 있습니다"}
+                value={newTitle}
+                disabled={!session || isSubmitting}
+                onChange={(e) => setNewTitle(e.target.value)}
+                style={{ flex: 1, minWidth: '200px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+              />
+            </div>
+
+            <textarea 
+              placeholder={session ? "팀원들과 나누고 싶은 이야기나 인증할 사진을 올려보세요..." : "로그인 후 이야기를 나누어 보세요!"}
+              value={newContent}
+              disabled={!session || isSubmitting}
+              onChange={(e) => setNewContent(e.target.value)}
+              rows={3}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' }}
+            />
+
+            {imagePreview && (
+              <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
+                <img 
+                  src={imagePreview} 
+                  alt="업로드 미리보기" 
+                  style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-6px',
+                    background: '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '22px',
+                    height: '22px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: session ? 'pointer' : 'not-allowed', color: '#475569', fontSize: '14px', background: '#fff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <Upload size={16} color="#3b82f6" />
+                <span>사진 첨부</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageChange} 
+                  disabled={!session || isSubmitting}
+                  style={{ display: 'none' }} 
+                />
+              </label>
+
+              <button 
+                type="submit" 
+                disabled={!session || isSubmitting} 
+                className="btn-primary" 
+                style={{ padding: '8px 16px', opacity: session && !isSubmitting ? 1 : 0.6 }}
+              >
+                <Send size={16} /> {isSubmitting ? '업로드 중...' : '글 작성하기'}
               </button>
             </div>
-          )}
+          </form>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: session ? 'pointer' : 'not-allowed', color: '#475569', fontSize: '14px', background: '#fff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-              <Upload size={16} color="#3b82f6" />
-              <span>사진 첨부</span>
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleImageChange} 
-                disabled={!session || isSubmitting}
-                style={{ display: 'none' }} 
-              />
-            </label>
+          {/* 게시글 목록 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {filteredPosts.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px 0' }}>
+                해당 커뮤니티에 남겨진 이야기가 없습니다. 첫 번째 글과 사진을 남겨보세요!
+              </p>
+            ) : (
+              filteredPosts.map((post) => {
+                const teamInfo = TEAM_CONFIG[post.team_id] || TEAM_CONFIG.rakko
+                const isLiked = likedPostIds.includes(post.id)
+                const isCommentsExpanded = expandedPostIds.includes(post.id)
+                const postComments = commentsMap[post.id] || []
+                const commentCount = post.comments?.[0]?.count || 0
 
-            <button 
-              type="submit" 
-              disabled={!session || isSubmitting} 
-              className="btn-primary" 
-              style={{ padding: '8px 16px', opacity: session && !isSubmitting ? 1 : 0.6 }}
-            >
-              <Send size={16} /> {isSubmitting ? '업로드 중...' : '글 작성하기'}
-            </button>
-          </div>
-        </form>
+                return (
+                  <div 
+                    key={post.id} 
+                    style={{ padding: '16px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <img src={teamInfo.image} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'cover' }} />
+                          {teamInfo.name}
+                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: '600', padding: '2px 8px', borderRadius: '12px', background: '#f1f5f9', color: '#475569' }}>
+                          {post.category || '자유'}
+                        </span>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>{post.title}</h3>
+                      </div>
 
-        {/* 게시글 목록 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {filteredPosts.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px 0' }}>
-              해당 커뮤니티에 남겨진 이야기가 없습니다. 첫 번째 글과 사진을 남겨보세요!
-            </p>
-          ) : (
-            filteredPosts.map((post) => {
-              const teamInfo = TEAM_CONFIG[post.team_id] || TEAM_CONFIG.rakko
-              const isLiked = likedPostIds.includes(post.id)
-              const isCommentsExpanded = expandedPostIds.includes(post.id)
-              const postComments = commentsMap[post.id] || []
-              const commentCount = post.comments?.[0]?.count || 0
-
-              return (
-                <div 
-                  key={post.id} 
-                  style={{ padding: '16px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <img src={teamInfo.image} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'cover' }} />
-                        {teamInfo.name}
-                      </span>
-                      <span style={{ fontSize: '12px', fontWeight: '600', padding: '2px 8px', borderRadius: '12px', background: '#f1f5f9', color: '#475569' }}>
-                        {post.category || '자유'}
-                      </span>
-                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>{post.title}</h3>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {/* 💬 댓글 토글 버튼 */}
-                      <button 
-                        type="button"
-                        onClick={() => toggleComments(post.id)}
-                        style={{ 
-                          border: '1px solid #e2e8f0', 
-                          background: isCommentsExpanded ? '#eff6ff' : '#f8fafc', 
-                          color: isCommentsExpanded ? '#2563eb' : '#64748b', 
-                          padding: '4px 10px', 
-                          borderRadius: '16px', 
-                          cursor: 'pointer', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '4px', 
-                          fontSize: '13px', 
-                          fontWeight: '600'
-                        }}
-                      >
-                        <MessageCircle size={14} /> 
-                        {commentCount}
-                      </button>
-
-                      {/* 💖 좋아요 버튼 */}
-                      <button 
-                        type="button"
-                        onClick={() => handleLikePost(post.id, post.likes)}
-                        style={{ 
-                          border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
-                          background: isLiked ? '#fff0f3' : '#f8fafc', 
-                          color: isLiked ? '#e11d48' : '#64748b', 
-                          padding: '4px 10px', 
-                          borderRadius: '16px', 
-                          cursor: 'pointer', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '4px', 
-                          fontSize: '13px', 
-                          fontWeight: '600'
-                        }}
-                      >
-                        <Heart size={14} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
-                        {post.likes || 0}
-                      </button>
-
-                      {session && session.user.id === post.user_id && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {/* 💬 댓글 버튼 */}
                         <button 
                           type="button"
-                          onClick={() => handleDeletePost(post.id, post.user_id)}
-                          style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
-                          title="게시글 삭제"
+                          onClick={() => toggleComments(post.id)}
+                          style={{ 
+                            border: '1px solid #e2e8f0', 
+                            background: isCommentsExpanded ? '#eff6ff' : '#f8fafc', 
+                            color: isCommentsExpanded ? '#2563eb' : '#64748b', 
+                            padding: '4px 10px', 
+                            borderRadius: '16px', 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px', 
+                            fontSize: '13px', 
+                            fontWeight: '600'
+                          }}
                         >
-                          <Trash2 size={14} /> 삭제
+                          <MessageCircle size={14} /> 
+                          {commentCount}
                         </button>
-                      )}
-                    </div>
-                  </div>
 
-                  <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
-                    {post.content}
-                  </p>
-
-                  {post.image_url && (
-                    <div style={{ marginBottom: '12px' }}>
-                      <a href={post.image_url} target="_blank" rel="noopener noreferrer">
-                        <img 
-                          src={post.image_url} 
-                          alt="게시글 첨부 사진" 
-                          style={{ maxWidth: '100%', maxHeight: '360px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'cover' }} 
-                        />
-                      </a>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <User size={13} /> {post.author_name}
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={13} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
-                    </span>
-                  </div>
-
-                  {/* 💬 펼쳐진 댓글 영역 */}
-                  {isCommentsExpanded && (
-                    <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px dashed #e2e8f0' }}>
-                      {/* 댓글 작성 폼 */}
-                      <form 
-                        onSubmit={(e) => handleCreateComment(post.id, e)} 
-                        style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}
-                      >
-                        <input 
-                          type="text" 
-                          placeholder={session ? "댓글을 남겨보세요..." : "로그인 후 댓글을 입력할 수 있습니다"}
-                          disabled={!session}
-                          value={commentInputs[post.id] || ''}
-                          onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
-                          style={{ flex: 1, padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                        />
+                        {/* 💖 좋아요 버튼 */}
                         <button 
-                          type="submit" 
-                          disabled={!session}
-                          className="btn-primary" 
-                          style={{ padding: '6px 12px', fontSize: '13px', opacity: session ? 1 : 0.6 }}
+                          type="button"
+                          onClick={() => handleLikePost(post.id, post.likes)}
+                          style={{ 
+                            border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
+                            background: isLiked ? '#fff0f3' : '#f8fafc', 
+                            color: isLiked ? '#e11d48' : '#64748b', 
+                            padding: '4px 10px', 
+                            borderRadius: '16px', 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px', 
+                            fontSize: '13px', 
+                            fontWeight: '600'
+                          }}
                         >
-                          <Send size={13} /> 등록
+                          <Heart size={14} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
+                          {post.likes || 0}
                         </button>
-                      </form>
 
-                      {/* 댓글 목록 */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {postComments.length === 0 ? (
-                          <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0' }}>아직 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>
-                        ) : (
-                          postComments.map((comment) => (
-                            <div 
-                              key={comment.id} 
-                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px' }}
-                            >
-                              <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                                  {comment.avatar_url && (
-                                    <img src={comment.avatar_url} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
-                                  )}
-                                  <span style={{ fontWeight: '700', fontSize: '13px', color: '#334155' }}>{comment.author_name}</span>
-                                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                                    {new Date(comment.created_at).toLocaleDateString('ko-KR')}
-                                  </span>
-                                </div>
-                                <p style={{ margin: 0, fontSize: '13px', color: '#475569', whiteSpace: 'pre-wrap' }}>{comment.content}</p>
-                              </div>
-
-                              {session && session.user.id === comment.user_id && (
-                                <button 
-                                  type="button"
-                                  onClick={() => handleDeleteComment(comment.id, post.id, comment.user_id)}
-                                  style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                  title="댓글 삭제"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
-                            </div>
-                          ))
+                        {session && session.user.id === post.user_id && (
+                          <button 
+                            type="button"
+                            onClick={() => handleDeletePost(post.id, post.user_id)}
+                            style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                            title="게시글 삭제"
+                          >
+                            <Trash2 size={14} /> 삭제
+                          </button>
                         )}
                       </div>
                     </div>
-                  )}
 
-                </div>
-              )
-            })
-          )}
-        </div>
-      </section>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                      {post.content}
+                    </p>
+
+                    {post.image_url && (
+                      <div style={{ marginBottom: '12px' }}>
+                        <a href={post.image_url} target="_blank" rel="noopener noreferrer">
+                          <img 
+                            src={post.image_url} 
+                            alt="게시글 첨부 사진" 
+                            style={{ maxWidth: '100%', maxHeight: '360px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'cover' }} 
+                          />
+                        </a>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <User size={13} /> {post.author_name}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={13} /> {new Date(post.created_at).toLocaleDateString('ko-KR')}
+                      </span>
+                    </div>
+
+                    {/* 💬 댓글 영역 */}
+                    {isCommentsExpanded && (
+                      <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px dashed #e2e8f0' }}>
+                        <form 
+                          onSubmit={(e) => handleCreateComment(post.id, e)} 
+                          style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}
+                        >
+                          <input 
+                            type="text" 
+                            placeholder={session ? "댓글을 남겨보세요..." : "로그인 후 댓글을 입력할 수 있습니다"}
+                            disabled={!session}
+                            value={commentInputs[post.id] || ''}
+                            onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
+                            style={{ flex: 1, padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                          />
+                          <button 
+                            type="submit" 
+                            disabled={!session}
+                            className="btn-primary" 
+                            style={{ padding: '6px 12px', fontSize: '13px', opacity: session ? 1 : 0.6 }}
+                          >
+                            <Send size={13} /> 등록
+                          </button>
+                        </form>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {postComments.length === 0 ? (
+                            <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0' }}>아직 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>
+                          ) : (
+                            postComments.map((comment) => (
+                              <div 
+                                key={comment.id} 
+                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px' }}
+                              >
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                    {comment.avatar_url && (
+                                      <img src={comment.avatar_url} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
+                                    )}
+                                    <span style={{ fontWeight: '700', fontSize: '13px', color: '#334155' }}>{comment.author_name}</span>
+                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                      {new Date(comment.created_at).toLocaleDateString('ko-KR')}
+                                    </span>
+                                  </div>
+                                  <p style={{ margin: 0, fontSize: '13px', color: '#475569', whiteSpace: 'pre-wrap' }}>{comment.content}</p>
+                                </div>
+
+                                {session && session.user.id === comment.user_id && (
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleDeleteComment(comment.id, post.id, comment.user_id)}
+                                    style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                    title="댓글 삭제"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
