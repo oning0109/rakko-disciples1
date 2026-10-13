@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Swords, Gamepad2, FileText } from 'lucide-react'
+import { 
+  Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, 
+  Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, 
+  Gift, LayoutDashboard, Target, Swords, Gamepad2, FileText, 
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight 
+} from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 로컬 PNG)
 const RAKKO_MASTER_IMAGE = '/rakko.png'
@@ -21,20 +26,20 @@ const FORTUNES = [
   { grade: '대길 🌟', quote: '오늘 너의 검 끝은 매섭군! 무슨 일이든 당당하게 임하라.', points: 5 },
   { grade: '중길 ⚔️', quote: '기본 자세가 제일 중요하다. 방심하지 마라!', points: 3 },
   { grade: '소길 🍨', quote: '달콤한 파르페를 먹으면 오늘은 기분 좋은 일이 생길 것이다.', points: 2 },
-  { grade: '평길 🍵', quote: '쉬  는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
+  { grade: '평길 🍵', quote: '쉬는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
   { grade: '말길 🍃', quote: '과자는 적당히 먹고, 제초 수련부터 차근차근 시작해라.', points: 1 },
 ]
 
 // 🏅 포인트 구간별 자동 칭호 산정 함수
 const getTitleByPoints = (points = 0) => {
-  if (points >= 1500000) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
-  if (points >= 1000000) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
-  if (points >= 500000) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
-  if (points >= 200000) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
-  return { name: '🌱 5급 제초사', color: '#64748b', bg: '#f1f5f9' }
+  if (points >= 200) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
+  if (points >= 100) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
+  if (points >= 50) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
+  if (points >= 20) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
+  return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
 }
 
-// 🛡️ 오버워치 최고 역할군 및 점수 계산 함수
+// 🛡️ 오버워치 최고 역할군 및 점수 계산 함수 (탱/딜/힐 중 최고점 산출)
 const getHighestOwMMR = (profile) => {
   if (!profile) return '언랭크'
 
@@ -56,10 +61,10 @@ const getHighestOwMMR = (profile) => {
 
 export default function App() {
   const [session, setSession] = useState(null)
-  const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community'
+  const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community' | 'calendar'
 
   const [teams, setTeams] = useState([])
-  const [allProfiles, setAllProfiles] = useState([]) // 👥 전체 유저 프로필 목록 (팀별 인원 조회용)
+  const [allProfiles, setAllProfiles] = useState([])
   const [userPoints, setUserPoints] = useState(0)
 
   // 🔮 오늘의 운세 관련 상태
@@ -81,7 +86,7 @@ export default function App() {
     userPosts: []
   })
 
-  // 게시판 관련 상태
+  // 💬 게시판 관련 상태
   const [posts, setPosts] = useState([])
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('all')
   const [newTitle, setNewTitle] = useState('')
@@ -94,12 +99,12 @@ export default function App() {
   const [imagePreview, setImagePreview] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 💬 댓글 관련 상태
+  // 댓글 관련 상태
   const [expandedPostIds, setExpandedPostIds] = useState([])
   const [commentsMap, setCommentsMap] = useState({})
   const [commentInputs, setCommentInputs] = useState({})
 
-  // 💖 좋아요 누른 게시글 ID 목록 (localStorage 연동)
+  // 좋아요 목록 (localStorage 연동)
   const [likedPostIds, setLikedPostIds] = useState(() => {
     try {
       const saved = localStorage.getItem('rakko_liked_posts')
@@ -108,6 +113,11 @@ export default function App() {
       return []
     }
   })
+
+  // 📅 일정/달력 관련 상태
+  const [schedules, setSchedules] = useState([])
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDateStr, setSelectedDateStr] = useState(new Date().toISOString().slice(0, 10))
 
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -189,6 +199,7 @@ export default function App() {
     fetchTeamScores()
     fetchUserProfiles()
     fetchPosts()
+    fetchSchedules()
 
     return () => subscription.unsubscribe()
   }, [])
@@ -201,7 +212,6 @@ export default function App() {
     if (!error && data) setTeams(data)
   }
 
-  // 👥 전체 유저 프로필 목록 불러오기 (팀별 멤버 조회용)
   const fetchUserProfiles = async () => {
     const { data, error } = await supabase
       .from('user_profiles')
@@ -216,6 +226,18 @@ export default function App() {
       .select('*, comments(count)')
       .order('created_at', { ascending: false })
     if (!error && data) setPosts(data)
+  }
+
+  // 📅 DB에서 일정 불러오기
+  const fetchSchedules = async () => {
+    const { data, error } = await supabase
+      .from('schedules')
+      .select('*')
+      .order('event_date', { ascending: true })
+
+    if (!error && data) {
+      setSchedules(data)
+    }
   }
 
   // 🎴 제자 프로필 카카오톡 모달 열기
@@ -691,6 +713,16 @@ export default function App() {
     ? posts
     : posts.filter((p) => p.team_id === selectedTeamFilter)
 
+  // 🗓️ 달력 날짜 계산 연산
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
+  const firstDayOfWeek = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1))
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
+
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '20px 16px' }}>
       {/* 1. 상단 프로필 & 헤더 */}
@@ -809,10 +841,33 @@ export default function App() {
         >
           <MessageSquare size={16} /> 팀 커뮤니티
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('calendar')}
+          style={{
+            flex: '1 0 auto',
+            padding: '10px 12px',
+            borderRadius: '12px',
+            border: activeTab === 'calendar' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
+            background: activeTab === 'calendar' ? '#f5f3ff' : '#fff',
+            color: activeTab === 'calendar' ? '#6d28d9' : '#64748b',
+            fontWeight: '700',
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <CalendarIcon size={16} /> 📅 일정 달력
+        </button>
       </nav>
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 1] 메인 대시보드 (팀별 소속 제자 표시 기능 추가) */}
+      {/* 📄 [PAGE 1] 메인 대시보드 */}
       {/* ========================================================= */}
       {activeTab === 'home' && (
         <section className="card">
@@ -827,7 +882,6 @@ export default function App() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {teams.map((team, index) => {
-              // 해당 팀 ID에 소속된 유저들 필터링
               const teamMembers = allProfiles.filter((profile) => profile.team_id === team.team_id)
 
               return (
@@ -840,7 +894,6 @@ export default function App() {
                     border: '1px solid #f1f5f9'
                   }}
                 >
-                  {/* 상단 팀 헤더 (순위, 팀 아이콘, 팀 이름, 채팅 수, 점수) */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
@@ -873,7 +926,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 👥 하단 소속 팀원(제자) 목록 칩 표기 영역 */}
                   <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginRight: '2px' }}>
                       소속 제자 ({teamMembers.length}명):
@@ -897,8 +949,7 @@ export default function App() {
                             cursor: 'pointer',
                             fontSize: '11px',
                             fontWeight: '600',
-                            color: '#334155',
-                            transition: 'all 0.15s ease'
+                            color: '#334155'
                           }}
                           title={`${member.username} 제자 프로필 보기`}
                         >
@@ -1093,7 +1144,6 @@ export default function App() {
             </h2>
           </div>
 
-          {/* 팀별 필터 탭 */}
           <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '14px' }}>
             <button
               type="button"
@@ -1141,7 +1191,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* 글 작성 폼 */}
           <form onSubmit={handleCreatePost} style={{ marginBottom: '20px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -1240,7 +1289,6 @@ export default function App() {
             </div>
           </form>
 
-          {/* 게시글 목록 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filteredPosts.length === 0 ? (
               <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0', fontSize: '13px' }}>
@@ -1358,7 +1406,6 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* 💬 댓글 영역 */}
                     {isCommentsExpanded && (
                       <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #e2e8f0' }}>
                         <form 
@@ -1433,7 +1480,155 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🎴 [MODAL] 제자 프로필 모달 */}
+      {/* 📅 [PAGE 4] 일정 달력 탭 */}
+      {/* ========================================================= */}
+      {activeTab === 'calendar' && (
+        <section className="card" style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>
+              {year}년 {month + 1}월 일정
+            </h2>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={prevMonth} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}>
+                <ChevronLeft size={16} />
+              </button>
+              <button onClick={nextMonth} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}>
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontWeight: '700', fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
+            <div style={{ color: '#ef4444' }}>일</div>
+            <div>월</div><div>화</div><div>수</div><div>목</div><div>금</div>
+            <div style={{ color: '#3b82f6' }}>토</div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+              <div key={`empty-${i}`} style={{ height: '70px', background: '#f8fafc', borderRadius: '8px' }} />
+            ))}
+
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const dayNum = i + 1
+              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
+              const daySchedules = schedules.filter((s) => s.event_date === dateStr)
+              const isSelected = selectedDateStr === dateStr
+
+              return (
+                <div
+                  key={dateStr}
+                  onClick={() => setSelectedDateStr(dateStr)}
+                  style={{
+                    height: '70px',
+                    padding: '4px',
+                    borderRadius: '8px',
+                    border: isSelected ? '2px solid #8b5cf6' : '1px solid #f1f5f9',
+                    background: isSelected ? '#f5f3ff' : '#fff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: isSelected ? '#6d28d9' : '#334155' }}>
+                    {dayNum}
+                  </span>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', overflowY: 'auto' }}>
+                    {daySchedules.map((sch) => (
+                      <div
+                        key={sch.id}
+                        style={{
+                          fontSize: '9px',
+                          padding: '1px 3px',
+                          borderRadius: '4px',
+                          background: sch.category === '생일' ? '#fce7f3' : '#e0f2fe',
+                          color: sch.category === '생일' ? '#be185d' : '#0369a1',
+                          fontWeight: '700',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '2px'
+                        }}
+                      >
+                        {sch.category === '생일' && sch.created_by_avatar ? (
+                          <img src={sch.created_by_avatar} alt="" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
+                        ) : null}
+                        {sch.title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px dashed #e2e8f0' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '800', color: '#334155' }}>
+              📌 {selectedDateStr} 일정 상세
+            </h3>
+
+            {schedules.filter((s) => s.event_date === selectedDateStr).length === 0 ? (
+              <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>등록된 일정이 없습니다.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {schedules.filter((s) => s.event_date === selectedDateStr).map((sch) => (
+                  <div
+                    key={sch.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      background: sch.category === '생일' ? '#fff5f5' : '#f8fafc',
+                      borderRadius: '10px',
+                      border: sch.category === '생일' ? '1px solid #fecdd3' : '1px solid #e2e8f0'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {sch.category === '생일' ? (
+                        <img
+                          src={sch.created_by_avatar || RAKKO_MASTER_IMAGE}
+                          alt="생일자 프로필"
+                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid #f43f5e', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px' }}>
+                          🎮
+                        </div>
+                      )}
+
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>
+                          {sch.title}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          분류: <b>{sch.category}</b>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '4px 8px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
+                      {sch.created_by_avatar && (
+                        <img src={sch.created_by_avatar} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
+                      )}
+                      <span style={{ fontSize: '11px', fontWeight: '600', color: '#475569' }}>
+                        등록: {sch.created_by_name}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================= */}
+      {/* 🎴 [MODAL] 제자 프로필 카카오톡 모달 */}
       {/* ========================================================= */}
       {selectedProfileModal.isOpen && (
         <div 
@@ -1465,7 +1660,6 @@ export default function App() {
               position: 'relative'
             }}
           >
-            {/* 닫기 버튼 */}
             <button 
               onClick={handleCloseProfileModal}
               style={{
@@ -1488,7 +1682,6 @@ export default function App() {
               <X size={15} />
             </button>
 
-            {/* 프로필 모달 통합 헤더 */}
             <div style={{
               background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
               padding: '24px 16px 16px 16px',
@@ -1538,7 +1731,6 @@ export default function App() {
               </div>
             ) : (
               <div style={{ padding: '16px' }}>
-                {/* 포인트 현황 */}
                 <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '10px', border: '1px solid #f1f5f9', textAlign: 'center', marginBottom: '14px' }}>
                   <span style={{ fontSize: '11px', color: '#64748b' }}>누적 제초/수련 포인트</span>
                   <div style={{ fontSize: '16px', fontWeight: '800', color: '#d97706', marginTop: '2px' }}>
@@ -1546,7 +1738,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 게임 전적 정보 */}
                 <div style={{ marginBottom: '14px' }}>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Gamepad2 size={13} color="#3b82f6" /> 게임 전적 / 티어
@@ -1576,7 +1767,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 최근 작성한 글 모아보기 */}
                 <div>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileText size={13} color="#3b82f6" /> 최근 작성한 글 ({selectedProfileModal.userPosts.length})
