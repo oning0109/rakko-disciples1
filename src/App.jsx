@@ -5,7 +5,7 @@ import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Sen
 // 상단 헤더 및 랏코 대표 이미지 URL
 const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
 
-// 종족(팀) ID별 대표 캐릭터 및 이름 매핑 (랏코 포함)
+// 종족(팀) ID별 대표 캐릭터 및 이름 매핑
 const TEAM_CONFIG = {
   rakko: { name: '랏코', image: RAKKO_MASTER_IMAGE },
   chiikawa: { name: '치이카와', image: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp' },
@@ -33,6 +33,16 @@ export default function App() {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // 💖 좋아요 누른 게시글 ID 목록 (localStorage 연동)
+  const [likedPostIds, setLikedPostIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rakko_liked_posts')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
 
   useEffect(() => {
     const syncUserProfile = async (currentSession) => {
@@ -221,10 +231,34 @@ export default function App() {
     }
   }
 
+  // 💖 좋아요 On/Off 토글 기능
   const handleLikePost = async (postId, currentLikes) => {
+    if (!session) {
+      alert('로그인이 필요한 기능입니다!')
+      return
+    }
+
+    const isAlreadyLiked = likedPostIds.includes(postId)
+    const newLikesCount = isAlreadyLiked 
+      ? Math.max(0, (currentLikes || 0) - 1) 
+      : (currentLikes || 0) + 1
+
+    // 1. 좋아요 눌린 목록 업데이트 & localStorage 저장
+    const updatedLikedIds = isAlreadyLiked
+      ? likedPostIds.filter((id) => id !== postId)
+      : [...likedPostIds, postId]
+
+    setLikedPostIds(updatedLikedIds)
+    try {
+      localStorage.setItem('rakko_liked_posts', JSON.stringify(updatedLikedIds))
+    } catch (err) {
+      console.error('localStorage 저장 실패:', err)
+    }
+
+    // 2. DB 카운트 업데이트
     const { error } = await supabase
       .from('posts')
-      .update({ likes: (currentLikes || 0) + 1 })
+      .update({ likes: newLikesCount })
       .eq('id', postId)
 
     if (!error) {
@@ -598,6 +632,8 @@ export default function App() {
           ) : (
             filteredPosts.map((post) => {
               const teamInfo = TEAM_CONFIG[post.team_id] || TEAM_CONFIG.rakko
+              const isLiked = likedPostIds.includes(post.id)
+
               return (
                 <div 
                   key={post.id} 
@@ -616,12 +652,27 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {/* 💖 좋아요 On/Off 토글 버튼 */}
                       <button 
                         type="button"
                         onClick={() => handleLikePost(post.id, post.likes)}
-                        style={{ border: 'none', background: '#fff0f3', color: '#e11d48', padding: '4px 10px', borderRadius: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: '600' }}
+                        style={{ 
+                          border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
+                          background: isLiked ? '#fff0f3' : '#f8fafc', 
+                          color: isLiked ? '#e11d48' : '#64748b', 
+                          padding: '4px 10px', 
+                          borderRadius: '16px', 
+                          cursor: 'pointer', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px', 
+                          fontSize: '13px', 
+                          fontWeight: '600',
+                          transition: 'all 0.2s ease'
+                        }}
                       >
-                        <Heart size={14} fill="#e11d48" /> {post.likes || 0}
+                        <Heart size={14} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
+                        {post.likes || 0}
                       </button>
 
                       {session && session.user.id === post.user_id && (
