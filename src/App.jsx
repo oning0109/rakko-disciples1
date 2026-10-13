@@ -59,7 +59,7 @@ const getHighestOwMMR = (profile) => {
   return `${highest.name} ${highest.score} pt`
 }
 
-// 📅 날짜 문자열에서 'MM-DD' (예: '05-05', '11-05')만 안전하게 추출하는 함수
+// 📅 날짜 문자열에서 'MM-DD' (예: '05-05', '11-05')만 추출하는 함수
 const getMMDD = (dateStr) => {
   if (!dateStr) return ''
   const clean = String(dateStr).split('T')[0].split(' ')[0].trim()
@@ -72,7 +72,28 @@ const getMMDD = (dateStr) => {
   return ''
 }
 
-// 📅 일정 날짜 비교 판별 함수 (생일은 연도 무시 MM-DD 비교, 일반 일정은 YYYY-MM-DD 완벽 일치)
+// ⏰ 시간 문자열 (HH:MM) 추출 함수 (생일 제외용)
+const getTimeStr = (dateStr) => {
+  if (!dateStr) return ''
+  const str = String(dateStr).trim()
+  let timePart = ''
+  if (str.includes('T')) {
+    timePart = str.split('T')[1]
+  } else if (str.includes(' ') && str.split(' ').length > 1 && str.split(' ')[1].includes(':')) {
+    timePart = str.split(' ')[1]
+  }
+  if (!timePart) return ''
+  const parts = timePart.split(':')
+  if (parts.length >= 2) {
+    const hh = parts[0].padStart(2, '0')
+    const mm = parts[1].padStart(2, '0')
+    if (hh === '00' && mm === '00') return '' // 자정 기본값 제외
+    return `${hh}:${mm}`
+  }
+  return ''
+}
+
+// 📅 일정 날짜 비교 판별 함수
 const isScheduleForDate = (schedule, targetDateStr) => {
   if (!schedule || !schedule.event_date) return false
   
@@ -88,7 +109,7 @@ const isScheduleForDate = (schedule, targetDateStr) => {
 
 export default function App() {
   const [session, setSession] = useState(null)
-  const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community' | 'calendar'
+  const [activeTab, setActiveTab] = useState('home')
 
   const [teams, setTeams] = useState([])
   const [allProfiles, setAllProfiles] = useState([])
@@ -105,7 +126,7 @@ export default function App() {
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
 
-  // 🎴 카카오톡 스타일 제자 프로필 모달 상태
+  // 🎴 제자 프로필 모달 상태
   const [selectedProfileModal, setSelectedProfileModal] = useState({
     isOpen: false,
     loading: false,
@@ -149,7 +170,6 @@ export default function App() {
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
 
-    // 운세 로드
     const savedFortuneDate = localStorage.getItem('rakko_fortune_date')
     const savedFortuneData = localStorage.getItem('rakko_fortune_data')
     if (savedFortuneDate === todayStr && savedFortuneData) {
@@ -157,7 +177,6 @@ export default function App() {
       try { setTodayFortune(JSON.parse(savedFortuneData)) } catch {}
     }
 
-    // 토벌 데이터 로드
     const savedSubDate = localStorage.getItem('rakko_sub_date')
     const savedSubData = localStorage.getItem('rakko_sub_data')
     if (savedSubDate === todayStr && savedSubData) {
@@ -255,16 +274,14 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 📅 DB에서 일정 및 user_profiles의 생일(birthday) 데이터 통합 불러오기
+  // 📅 DB 일정 + 프로필 생일 불러오기
   const fetchSchedules = async () => {
     try {
-      // 1. 일반 일정 (schedules 테이블) 조회
       const { data: scheduleData, error: scheduleError } = await supabase
         .from('schedules')
         .select('*')
         .order('event_date', { ascending: true })
 
-      // 2. 유저 프로필 (user_profiles 테이블)의 birthday 데이터 조회
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('user_id, discord_id, username, avatar_url, birthday')
@@ -277,7 +294,6 @@ export default function App() {
       }
 
       if (!profileError && profileData) {
-        // birthday 항목을 생일 일정 데이터로 변환하여 병합
         const profileBirthdays = profileData
           .filter((p) => p.birthday && String(p.birthday).trim() !== '')
           .map((p) => ({
@@ -298,7 +314,6 @@ export default function App() {
     }
   }
 
-  // 🎴 제자 프로필 카카오톡 모달 열기
   const handleOpenProfileModal = async (userId, authorName, authorAvatar) => {
     setSelectedProfileModal({ isOpen: true, loading: true, profile: null, userPosts: [] })
 
@@ -356,7 +371,6 @@ export default function App() {
     setSelectedProfileModal({ isOpen: false, loading: false, profile: null, userPosts: [] })
   }
 
-  // 🔮 랏코 스승의 오늘의 운세 뽑기
   const handleDrawFortune = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -405,7 +419,6 @@ export default function App() {
     }
   }
 
-  // 🗡️ 토벌 수련 시작
   const handleStartSubjugation = () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -427,7 +440,6 @@ export default function App() {
     setSubjugationTimer(timer)
   }
 
-  // 🗡️ 몬스터 클릭
   const handleMonsterClick = async () => {
     if (subjugationStatus === 'waiting') {
       clearTimeout(subjugationTimer)
@@ -1033,7 +1045,6 @@ export default function App() {
       {/* ========================================================= */}
       {activeTab === 'training' && (
         <>
-          {/* 🔮 랏코 스승의 오늘의 운세 */}
           <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -1079,7 +1090,6 @@ export default function App() {
             )}
           </section>
 
-          {/* 🗡️ 오늘의 토벌 수련 */}
           <section className="card" style={{ background: '#fef2f2', borderColor: '#fecdd3', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <div>
@@ -1166,7 +1176,6 @@ export default function App() {
             )}
           </section>
 
-          {/* 🌱 오늘의 제초 수련 */}
           <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -1538,7 +1547,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📅 [PAGE 4] 일정 달력 탭 (schedules + user_profiles 통합) */}
+      {/* 📅 [PAGE 4] 일정 달력 탭 */}
       {/* ========================================================= */}
       {activeTab === 'calendar' && (
         <section className="card" style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0' }}>
@@ -1595,30 +1604,36 @@ export default function App() {
                   </span>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', overflowY: 'auto' }}>
-                    {daySchedules.map((sch) => (
-                      <div
-                        key={sch.id}
-                        style={{
-                          fontSize: '9px',
-                          padding: '1px 3px',
-                          borderRadius: '4px',
-                          background: sch.category === '생일' ? '#fce7f3' : '#e0f2fe',
-                          color: sch.category === '생일' ? '#be185d' : '#0369a1',
-                          fontWeight: '700',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '2px'
-                        }}
-                      >
-                        {sch.category === '생일' && sch.created_by_avatar ? (
-                          <img src={sch.created_by_avatar} alt="" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
-                        ) : null}
-                        {sch.title}
-                      </div>
-                    ))}
+                    {daySchedules.map((sch) => {
+                      const isBirthday = sch.category === '생일'
+                      const timeStr = !isBirthday ? getTimeStr(sch.event_date) : ''
+                      const displayTitle = timeStr ? `[${timeStr}] ${sch.title}` : sch.title
+
+                      return (
+                        <div
+                          key={sch.id}
+                          style={{
+                            fontSize: '9px',
+                            padding: '1px 3px',
+                            borderRadius: '4px',
+                            background: isBirthday ? '#fce7f3' : '#e0f2fe',
+                            color: isBirthday ? '#be185d' : '#0369a1',
+                            fontWeight: '700',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}
+                        >
+                          {isBirthday && sch.created_by_avatar ? (
+                            <img src={sch.created_by_avatar} alt="" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
+                          ) : null}
+                          {displayTitle}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )
@@ -1634,52 +1649,60 @@ export default function App() {
               <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>등록된 일정이 없습니다.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {schedules.filter((s) => isScheduleForDate(s, selectedDateStr)).map((sch) => (
-                  <div
-                    key={sch.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      background: sch.category === '생일' ? '#fff5f5' : '#f8fafc',
-                      borderRadius: '10px',
-                      border: sch.category === '생일' ? '1px solid #fecdd3' : '1px solid #e2e8f0'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {sch.category === '생일' ? (
-                        <img
-                          src={sch.created_by_avatar || RAKKO_MASTER_IMAGE}
-                          alt="생일자 프로필"
-                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid #f43f5e', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px' }}>
-                          🎮
-                        </div>
-                      )}
+                {schedules.filter((s) => isScheduleForDate(s, selectedDateStr)).map((sch) => {
+                  const isBirthday = sch.category === '생일'
+                  const timeStr = !isBirthday ? getTimeStr(sch.event_date) : ''
 
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>
-                          {sch.title}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                          분류: <b>{sch.category}</b>
+                  return (
+                    <div
+                      key={sch.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 12px',
+                        background: isBirthday ? '#fff5f5' : '#f8fafc',
+                        borderRadius: '10px',
+                        border: isBirthday ? '1px solid #fecdd3' : '1px solid #e2e8f0'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {isBirthday ? (
+                          <img
+                            src={sch.created_by_avatar || RAKKO_MASTER_IMAGE}
+                            alt="생일자 프로필"
+                            style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid #f43f5e', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px' }}>
+                            🎮
+                          </div>
+                        )}
+
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>
+                            {sch.title}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', display: 'flex', gap: '8px' }}>
+                            <span>분류: <b>{sch.category}</b></span>
+                            {timeStr && (
+                              <span>시간: <b>{timeStr}</b></span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '4px 8px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
-                      {sch.created_by_avatar && (
-                        <img src={sch.created_by_avatar} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
-                      )}
-                      <span style={{ fontSize: '11px', fontWeight: '600', color: '#475569' }}>
-                        등록: {sch.created_by_name}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '4px 8px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
+                        {sch.created_by_avatar && (
+                          <img src={sch.created_by_avatar} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
+                        )}
+                        <span style={{ fontSize: '11px', fontWeight: '600', color: '#475569' }}>
+                          등록: {sch.created_by_name}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
