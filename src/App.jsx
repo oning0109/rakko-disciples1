@@ -713,7 +713,7 @@ export default function App() {
     ? posts
     : posts.filter((p) => p.team_id === selectedTeamFilter)
 
-  // 🗓️ 달력 날짜 계산 연산
+  // 🗓️ 달력 날짜 연산
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
@@ -1480,7 +1480,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📅 [PAGE 4] 일정 달력 탭 */}
+      {/* 📅 [PAGE 4] 일정 달력 탭 (생일 MM-DD 비교 및 연동 보수) */}
       {/* ========================================================= */}
       {activeTab === 'calendar' && (
         <section className="card" style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0' }}>
@@ -1512,7 +1512,18 @@ export default function App() {
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const dayNum = i + 1
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
-              const daySchedules = schedules.filter((s) => s.event_date === dateStr)
+              
+              // 💡 생일은 연도 제외 MM-DD 비교, 일반 일정은 YYYY-MM-DD 완벽 일치 비교
+              const daySchedules = schedules.filter((s) => {
+                if (!s.event_date) return false
+                if (s.category === '생일') {
+                  const scheduleMMDD = s.event_date.length >= 5 ? s.event_date.slice(-5) : s.event_date
+                  const currentMMDD = dateStr.slice(-5)
+                  return scheduleMMDD === currentMMDD
+                }
+                return s.event_date === dateStr
+              })
+
               const isSelected = selectedDateStr === dateStr
 
               return (
@@ -1571,11 +1582,27 @@ export default function App() {
               📌 {selectedDateStr} 일정 상세
             </h3>
 
-            {schedules.filter((s) => s.event_date === selectedDateStr).length === 0 ? (
+            {schedules.filter((s) => {
+              if (!s.event_date) return false
+              if (s.category === '생일') {
+                const scheduleMMDD = s.event_date.length >= 5 ? s.event_date.slice(-5) : s.event_date
+                const selectedMMDD = selectedDateStr.slice(-5)
+                return scheduleMMDD === selectedMMDD
+              }
+              return s.event_date === selectedDateStr
+            }).length === 0 ? (
               <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>등록된 일정이 없습니다.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {schedules.filter((s) => s.event_date === selectedDateStr).map((sch) => (
+                {schedules.filter((s) => {
+                  if (!s.event_date) return false
+                  if (s.category === '생일') {
+                    const scheduleMMDD = s.event_date.length >= 5 ? s.event_date.slice(-5) : s.event_date
+                    const selectedMMDD = selectedDateStr.slice(-5)
+                    return scheduleMMDD === selectedMMDD
+                  }
+                  return s.event_date === selectedDateStr
+                }).map((sch) => (
                   <div
                     key={sch.id}
                     style={{
