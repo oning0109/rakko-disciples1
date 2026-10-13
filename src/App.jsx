@@ -255,15 +255,46 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 📅 DB에서 일정 불러오기
+  // 📅 DB에서 일정 및 user_profiles의 생일(birthday) 데이터 통합 불러오기
   const fetchSchedules = async () => {
-    const { data, error } = await supabase
-      .from('schedules')
-      .select('*')
-      .order('event_date', { ascending: true })
+    try {
+      // 1. 일반 일정 (schedules 테이블) 조회
+      const { data: scheduleData, error: scheduleError } = await supabase
+        .from('schedules')
+        .select('*')
+        .order('event_date', { ascending: true })
 
-    if (!error && data) {
-      setSchedules(data)
+      // 2. 유저 프로필 (user_profiles 테이블)의 birthday 데이터 조회
+      const { data: profileData, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('user_id, discord_id, username, avatar_url, birthday')
+        .not('birthday', 'is', null)
+
+      let combinedSchedules = []
+
+      if (!scheduleError && scheduleData) {
+        combinedSchedules = [...scheduleData]
+      }
+
+      if (!profileError && profileData) {
+        // birthday 항목을 생일 일정 데이터로 변환하여 병합
+        const profileBirthdays = profileData
+          .filter((p) => p.birthday && String(p.birthday).trim() !== '')
+          .map((p) => ({
+            id: `profile-bday-${p.discord_id || p.user_id}`,
+            title: `${p.username} 생일`,
+            category: '생일',
+            event_date: p.birthday,
+            created_by_name: p.username,
+            created_by_avatar: p.avatar_url || RAKKO_MASTER_IMAGE
+          }))
+
+        combinedSchedules = [...combinedSchedules, ...profileBirthdays]
+      }
+
+      setSchedules(combinedSchedules)
+    } catch (err) {
+      console.error('일정 불러오기 중 오류 발생:', err)
     }
   }
 
@@ -1507,7 +1538,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📅 [PAGE 4] 일정 달력 탭 (안전한 MM-DD 비교 로직 적용) */}
+      {/* 📅 [PAGE 4] 일정 달력 탭 (schedules + user_profiles 통합) */}
       {/* ========================================================= */}
       {activeTab === 'calendar' && (
         <section className="card" style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0' }}>
@@ -1540,7 +1571,6 @@ export default function App() {
               const dayNum = i + 1
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
               
-              // 💡 정제 함수를 이용해 생일 및 일반 일정 비교
               const daySchedules = schedules.filter((s) => isScheduleForDate(s, dateStr))
               const isSelected = selectedDateStr === dateStr
 
