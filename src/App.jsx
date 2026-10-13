@@ -2,6 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, ShieldCheck, Flame, Send, Heart, User, Clock, Trash2 } from 'lucide-react'
 
+// 종족(팀) ID별 대표 캐릭터 이미지 매핑
+const TEAM_IMAGES = {
+  chiikawa: 'https://i.namu.wiki/i/dB_CPoscQ6UKTy-0ogw-ntKAX78MU_gr5T3eSIbDEOF4ec0aTaJKbXkIzN-Cod1Sh1NIqIdOT1eXavMKvJ6tcQ.webp', // 치이카와 이미지 URL
+  hachiware: 'https://i.namu.wiki/i/mqiv0Rb5tbt2C3cCkJCMV_NCeX7YCFfXpYUIebD5_gyietmJewBWlY7uBnyWCHP92ZNY-uIJtNhpuKbyAP40HA.webp', // 하치와레 이미지 URL
+  usagi: 'https://i.namu.wiki/i/PJL_NmmYcz0IvJbqzwprwPbDN_X-bdmBEMAvlc2XZrxUu0crrWUdNV6eZ4_6cUz4CjXrnl4_xtSLGHvRnAEBBA.webp', // 우사기 이미지 URL
+  momonga: 'https://i.namu.wiki/i/m3vvkdjvU71l5ryX3GHeQz-t-39twY_SSmfUZGCnufTadOJBpMQhciMnQen0H8aufzkW8I13kRGBYJyI9UiYxw.webp', // 모몽가 이미지 URL
+  kurimanju: 'https://i.namu.wiki/i/A-umWeRuPvy8wgp0raNVjoDASW6dyP_MTF58AMWMJjUwm2mJQyUwi7NWbuRcWPwZu5PhUgVbJK-Bb0u2A47ccg.webp', // 크리만쥬 이미지 URL
+  shisa: 'https://i.namu.wiki/i/FJNlLvE3p0nZ9m3zif83srjt7y0dCpxPfYB-qENldPpZ7cw3yX4y07oVMT8mLoewnmsv0vQOAXP7W1PRJyc2ow.webp', // 시사 이미지 URL
+};
+
+// 상단 헤더 랏코 스승 대표 이미지 URL (원하는 랏코 이미지 주소로 변경 가능)
+const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp';
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [teams, setTeams] = useState([])
@@ -252,7 +265,17 @@ export default function App() {
       {/* 1. 상단 프로필 & 헤더 */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ fontSize: '36px', background: '#fef3c7', padding: '8px 12px', borderRadius: '16px' }}>🦦</div>
+          <img 
+  src={RAKKO_MASTER_IMAGE} 
+  alt="스승 랏코" 
+  style={{ 
+    width: '52px', 
+    height: '52px', 
+    borderRadius: '16px', 
+    backgroundColor: '#fef3c7', 
+    padding: '4px',
+    objectFit: 'cover' 
+  }}
           <div>
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '800' }}>랏코와 제자들</h1>
             <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '14px' }}>디스코드 커뮤니티 대시보드</p>
@@ -303,36 +326,41 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {teams.map((team, index) => (
-            <div 
-              key={team.team_id} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                padding: '14px 18px', 
-                backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
-                borderRadius: '12px',
-                border: '1px solid #f1f5f9'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
-                  {index + 1}
-                </div>
-                <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
-              </div>
+          {/* 팀 순위 리더보드 mapping 부분 */}
+{teams.map((team, index) => (
+  <div key={team.team_id} style={{ ... }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
+        {index + 1}
+      </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
-                <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <MessageSquare size={14}/> {team.weekly_chats || 0}회
-                </span>
-                <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
-                  {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
-                </span>
-              </div>
-            </div>
-          ))}
+      {/* 🌟 종족별 캐릭터 이미지 표시 🌟 */}
+      <img 
+        src={TEAM_IMAGES[team.team_id] || RAKKO_MASTER_IMAGE} 
+        alt={team.team_name} 
+        style={{ 
+          width: '36px', 
+          height: '36px', 
+          borderRadius: '50%', 
+          border: '2px solid #e2e8f0',
+          objectFit: 'cover',
+          backgroundColor: '#fff'
+        }} 
+      />
+
+      <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
+    </div>
+
+    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
+      <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <MessageSquare size={14}/> {team.weekly_chats || 0}회
+      </span>
+      <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
+        {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
+      </span>
+    </div>
+  </div>
+))}
         </div>
       </section>
 
