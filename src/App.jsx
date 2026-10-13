@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Zap } from 'lucide-react'
+import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Swords } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 URL
 const RAKKO_MASTER_IMAGE = 'https://i.namu.wiki/i/hjmKzkBU2dSFzcMGW-2FGuhLw2KJsRh0QICaMPUWpUhDKfNNewH-PNO4_jdir725sYrgFJd4vykBGsk5FQ_UJA.webp'
@@ -27,7 +27,7 @@ const FORTUNES = [
 
 export default function App() {
   const [session, setSession] = useState(null)
-  const [activeTab, setActiveTab] = useState('home') // 'home' | 'community'
+  const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community'
 
   const [teams, setTeams] = useState([])
   const [userPoints, setUserPoints] = useState(0)
@@ -218,7 +218,7 @@ export default function App() {
     }
   }
 
-  // 🗡️ 토벌 수련 시작 (준비 단계)
+  // 🗡️ 토벌 수련 시작
   const handleStartSubjugation = () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -230,7 +230,7 @@ export default function App() {
     }
 
     setSubjugationStatus('waiting')
-    const randomDelay = Math.floor(Math.random() * 2000) + 1500 // 1.5초~3.5초 지연
+    const randomDelay = Math.floor(Math.random() * 2000) + 1500
 
     const timer = setTimeout(() => {
       setSubjugationStatus('ready')
@@ -240,7 +240,7 @@ export default function App() {
     setSubjugationTimer(timer)
   }
 
-  // 🗡️ 몬스터 클릭 (순발력 측정)
+  // 🗡️ 몬스터 클릭
   const handleMonsterClick = async () => {
     if (subjugationStatus === 'waiting') {
       clearTimeout(subjugationTimer)
@@ -269,7 +269,6 @@ export default function App() {
       localStorage.setItem('rakko_sub_date', todayStr)
       localStorage.setItem('rakko_sub_data', JSON.stringify(result))
 
-      // 팀 점수 반영
       try {
         const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
         const { data: profile } = await supabase
@@ -625,29 +624,54 @@ export default function App() {
         )}
       </header>
 
-      {/* 2. 메인 네비게이션 탭 */}
-      <nav style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+      {/* 🌟 2. 메인 네비게이션 탭 (3개 분리) */}
+      <nav style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button
           type="button"
           onClick={() => setActiveTab('home')}
           style={{
             flex: 1,
-            padding: '12px',
+            minWidth: '140px',
+            padding: '12px 10px',
             borderRadius: '12px',
             border: activeTab === 'home' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
             background: activeTab === 'home' ? '#eff6ff' : '#fff',
             color: activeTab === 'home' ? '#1d4ed8' : '#64748b',
             fontWeight: '700',
-            fontSize: '15px',
+            fontSize: '14px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
             transition: 'all 0.2s ease'
           }}
         >
-          <LayoutDashboard size={18} /> 메인 대시보드
+          <LayoutDashboard size={17} /> 메인 대시보드
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('training')}
+          style={{
+            flex: 1,
+            minWidth: '140px',
+            padding: '12px 10px',
+            borderRadius: '12px',
+            border: activeTab === 'training' ? '2px solid #d97706' : '1px solid #e2e8f0',
+            background: activeTab === 'training' ? '#fffbe3' : '#fff',
+            color: activeTab === 'training' ? '#b45309' : '#64748b',
+            fontWeight: '700',
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Swords size={17} /> 🥋 수련의 전당
         </button>
 
         <button
@@ -655,31 +679,95 @@ export default function App() {
           onClick={() => setActiveTab('community')}
           style={{
             flex: 1,
-            padding: '12px',
+            minWidth: '140px',
+            padding: '12px 10px',
             borderRadius: '12px',
             border: activeTab === 'community' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
             background: activeTab === 'community' ? '#eff6ff' : '#fff',
             color: activeTab === 'community' ? '#1d4ed8' : '#64748b',
             fontWeight: '700',
-            fontSize: '15px',
+            fontSize: '14px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
             transition: 'all 0.2s ease'
           }}
         >
-          <MessageSquare size={18} /> 팀 커뮤니티
+          <MessageSquare size={17} /> 팀 커뮤니티
         </button>
       </nav>
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 1] 메인 대시보드 */}
+      {/* 📄 [PAGE 1] 메인 대시보드 (팀 순위 리더보드) */}
       {/* ========================================================= */}
       {activeTab === 'home' && (
+        <section className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Trophy color="#f59e0b" size={22} /> 종족별 팀 순위
+            </h2>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: '#f3f4f6', padding: '4px 8px', borderRadius: '6px' }}>
+              실시간 자동 집계
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {teams.map((team, index) => (
+              <div 
+                key={team.team_id} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  padding: '14px 18px', 
+                  backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
+                  borderRadius: '12px',
+                  border: '1px solid #f1f5f9'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
+                    {index + 1}
+                  </div>
+
+                  <img 
+                    src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
+                    alt={team.team_name} 
+                    style={{ 
+                      width: '36px', 
+                      height: '36px', 
+                      borderRadius: '50%', 
+                      border: '2px solid #e2e8f0',
+                      objectFit: 'cover',
+                      backgroundColor: '#fff'
+                    }} 
+                  />
+
+                  <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
+                  <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <MessageSquare size={14}/> {team.weekly_chats || 0}회
+                  </span>
+                  <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
+                    {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================= */}
+      {/* 📄 [PAGE 2] 🥋 수련의 전당 (운세 + 토벌 + 제초 수련) */}
+      {/* ========================================================= */}
+      {activeTab === 'training' && (
         <>
-          {/* 🔮 랏코 스승의 오늘의 운세 위젯 */}
+          {/* 🔮 랏코 스승의 오늘의 운세 */}
           <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -725,8 +813,8 @@ export default function App() {
             )}
           </section>
 
-          {/* 🗡️ 오늘의 토벌 수련 (3초 순발력 미니게임) */}
-          <section className="card" style={{ background: '#fef2f2', borderColor: '#fecdd3', marginBottom: '24px' }}>
+          {/* 🗡️ 오늘의 토벌 수련 */}
+          <section className="card" style={{ background: '#fef2f2', borderColor: '#fecdd3', marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div>
                 <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -758,7 +846,6 @@ export default function App() {
               )}
             </div>
 
-            {/* 미니게임 진행 대화상자/클릭 영역 */}
             {subjugationStatus === 'waiting' && (
               <div 
                 onClick={handleMonsterClick}
@@ -787,11 +874,10 @@ export default function App() {
                   textAlign: 'center',
                   cursor: 'pointer',
                   color: '#fff',
-                  boxShadow: '0 0 16px rgba(239,68,68,0.5)',
-                  animation: 'pulse 0.5s infinite'
+                  boxShadow: '0 0 16px rgba(239,68,68,0.5)'
                 }}
               >
-                <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <p style={{ margin: 0, fontSize: '22px', fontWeight: '900' }}>
                   👾 몬스터 출현! 지금 바로 클릭하세요!!!
                 </p>
               </div>
@@ -814,67 +900,8 @@ export default function App() {
             )}
           </section>
 
-          {/* 팀 순위 리더보드 */}
-          <section className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Trophy color="#f59e0b" size={22} /> 종족별 팀 순위
-              </h2>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: '#f3f4f6', padding: '4px 8px', borderRadius: '6px' }}>
-                실시간 자동 집계
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {teams.map((team, index) => (
-                <div 
-                  key={team.team_id} 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between', 
-                    padding: '14px 18px', 
-                    backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
-                    borderRadius: '12px',
-                    border: '1px solid #f1f5f9'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
-                      {index + 1}
-                    </div>
-
-                    <img 
-                      src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
-                      alt={team.team_name} 
-                      style={{ 
-                        width: '36px', 
-                        height: '36px', 
-                        borderRadius: '50%', 
-                        border: '2px solid #e2e8f0',
-                        objectFit: 'cover',
-                        backgroundColor: '#fff'
-                      }} 
-                    />
-
-                    <span style={{ fontWeight: '700', fontSize: '15px' }}>{team.team_name}</span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <MessageSquare size={14}/> {team.weekly_chats || 0}회
-                    </span>
-                    <span style={{ fontWeight: '800', color: '#d97706', fontSize: '16px' }}>
-                      {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '12px', fontWeight: '500' }}>pt</span>
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 오늘의 제초 수련 미니게임 */}
-          <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: '24px' }}>
+          {/* 🌱 오늘의 제초 수련 */}
+          <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -899,7 +926,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 2] 팀 커뮤니티 */}
+      {/* 📄 [PAGE 3] 팀 커뮤니티 */}
       {/* ========================================================= */}
       {activeTab === 'community' && (
         <section className="card">
