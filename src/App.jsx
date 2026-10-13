@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import { Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, Gift, LayoutDashboard, Target, Swords, Gamepad2, FileText } from 'lucide-react'
 
-// 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 기준)
+// 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 로컬 PNG)
 const RAKKO_MASTER_IMAGE = '/rakko.png'
 
 // 종족(팀) ID별 대표 캐릭터 및 이름 매핑 (public/ 폴더 로컬 PNG)
@@ -1004,7 +1004,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 3] 팀 커뮤니티 (모발 최적화 정렬) */}
+      {/* 📄 [PAGE 3] 팀 커뮤니티 */}
       {/* ========================================================= */}
       {activeTab === 'community' && (
         <section className="card">
@@ -1062,7 +1062,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* 글 작성 폼 (모바일 반응형 정렬) */}
+          {/* 글 작성 폼 */}
           <form onSubmit={handleCreatePost} style={{ marginBottom: '20px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -1161,7 +1161,7 @@ export default function App() {
             </div>
           </form>
 
-          {/* 게시글 목록 (모바일 정렬 개선) */}
+          {/* 게시글 목록 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filteredPosts.length === 0 ? (
               <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0', fontSize: '13px' }}>
@@ -1180,7 +1180,6 @@ export default function App() {
                     key={post.id} 
                     style={{ padding: '14px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
                   >
-                    {/* 모바일 최적화 포스트 헤더 */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -1193,7 +1192,6 @@ export default function App() {
                           </span>
                         </div>
 
-                        {/* 댓글, 좋아요, 삭제 버튼 그룹 */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <button 
                             type="button"
@@ -1356,7 +1354,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🎴 [MODAL] 제자 프로필 카카오톡 스타일 모달 */}
+      {/* 🎴 [MODAL] 제자 프로필 모달 (네모칸 가림 보수 및 오버워치 언랭크 처리) */}
       {/* ========================================================= */}
       {selectedProfileModal.isOpen && (
         <div 
@@ -1384,17 +1382,18 @@ export default function App() {
               backgroundColor: '#fff',
               borderRadius: '20px',
               overflow: 'hidden',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
               position: 'relative'
             }}
           >
+            {/* 닫기 버튼 */}
             <button 
               onClick={handleCloseProfileModal}
               style={{
                 position: 'absolute',
-                top: '10px',
-                right: '10px',
-                background: 'rgba(0,0,0,0.3)',
+                top: '12px',
+                right: '12px',
+                background: 'rgba(0,0,0,0.2)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '50%',
@@ -1410,73 +1409,78 @@ export default function App() {
               <X size={15} />
             </button>
 
+            {/* 통합 통합 헤더 영역 (네모칸에 가려지지 않도록 패딩형 레이아웃으로 변경) */}
             <div style={{
-              height: '90px',
               background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
-              position: 'relative'
-            }} />
+              padding: '24px 16px 16px 16px',
+              textAlign: 'center'
+            }}>
+              <img 
+                src={selectedProfileModal.profile?.avatar_url || RAKKO_MASTER_IMAGE} 
+                alt="프로필" 
+                style={{
+                  width: '76px',
+                  height: '76px',
+                  borderRadius: '50%',
+                  border: '3px solid #fff',
+                  backgroundColor: '#fff',
+                  objectFit: 'cover',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                  marginBottom: '6px'
+                }}
+              />
+              
+              <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
+                {selectedProfileModal.profile?.username || '익명 제자'}
+              </h3>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                {selectedProfileModal.profile?.team_id && (
+                  <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', background: 'rgba(255,255,255,0.9)', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <img src={TEAM_CONFIG[selectedProfileModal.profile.team_id]?.image || RAKKO_MASTER_IMAGE} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
+                    {TEAM_CONFIG[selectedProfileModal.profile.team_id]?.name || '랏코'}
+                  </span>
+                )}
+
+                {(() => {
+                  const title = getTitleByPoints(selectedProfileModal.profile?.points || 0)
+                  return (
+                    <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', background: 'rgba(255,255,255,0.9)', color: title.color }}>
+                      {title.name}
+                    </span>
+                  )
+                })()}
+              </div>
+            </div>
 
             {selectedProfileModal.loading ? (
               <div style={{ padding: '30px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
                 프로필 조회 중...
               </div>
             ) : (
-              <div style={{ padding: '0 16px 16px 16px', marginTop: '-36px' }}>
-                <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-                  <img 
-                    src={selectedProfileModal.profile?.avatar_url || RAKKO_MASTER_IMAGE} 
-                    alt="프로필" 
-                    style={{
-                      width: '72px',
-                      height: '72px',
-                      borderRadius: '50%',
-                      border: '3px solid #fff',
-                      backgroundColor: '#fff',
-                      objectFit: 'cover',
-                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                    }}
-                  />
-                  
-                  <h3 style={{ margin: '4px 0 2px 0', fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>
-                    {selectedProfileModal.profile?.username || '익명 제자'}
-                  </h3>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                    {selectedProfileModal.profile?.team_id && (
-                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 7px', borderRadius: '10px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <img src={TEAM_CONFIG[selectedProfileModal.profile.team_id]?.image || RAKKO_MASTER_IMAGE} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
-                        {TEAM_CONFIG[selectedProfileModal.profile.team_id]?.name || '랏코'}
-                      </span>
-                    )}
-
-                    {(() => {
-                      const title = getTitleByPoints(selectedProfileModal.profile?.points || 0)
-                      return (
-                        <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 7px', borderRadius: '10px', background: title.bg, color: title.color, border: `1px solid ${title.color}33` }}>
-                          {title.name}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                </div>
-
-                <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '10px', border: '1px solid #f1f5f9', textAlign: 'center', marginBottom: '12px' }}>
+              <div style={{ padding: '16px' }}>
+                {/* 포인트 현황 */}
+                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '10px', border: '1px solid #f1f5f9', textAlign: 'center', marginBottom: '14px' }}>
                   <span style={{ fontSize: '11px', color: '#64748b' }}>누적 제초/수련 포인트</span>
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#d97706', marginTop: '2px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#d97706', marginTop: '2px' }}>
                     {(selectedProfileModal.profile?.points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
                   </div>
                 </div>
 
-                <div style={{ marginBottom: '12px' }}>
+                {/* 게임 전적 정보 */}
+                <div style={{ marginBottom: '14px' }}>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Gamepad2 size={13} color="#3b82f6" /> 게임 전적 / 티어
                   </h4>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', textAlign: 'center' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', textAlign: 'center' }}>
                     <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
                       <div style={{ fontSize: '10px', color: '#64748b' }}>오버워치</div>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#0284c7', marginTop: '2px' }}>
-                        {selectedProfileModal.profile?.deal_mmr ? `${selectedProfileModal.profile.deal_mmr} pt` : '미등록'}
+                        {/* 오버워치 1000점 이하 또는 미등록 시 '언랭크' 표기 */}
+                        {(!selectedProfileModal.profile?.deal_mmr || selectedProfileModal.profile.deal_mmr <= 1000) 
+                          ? '언랭크' 
+                          : `${selectedProfileModal.profile.deal_mmr} pt`}
                       </div>
                     </div>
 
@@ -1496,6 +1500,7 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 최근 작성한 글 모아보기 */}
                 <div>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileText size={13} color="#3b82f6" /> 최근 작성한 글 ({selectedProfileModal.userPosts.length})
