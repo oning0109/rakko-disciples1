@@ -34,7 +34,7 @@ const getTitleByPoints = (points = 0) => {
   return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
 }
 
-// 🛡️ 오버워치 최고 역할군 및 점수 계산 함수 (탱/딜/힐 중 최고점 산출)
+// 🛡️ 오버워치 최고 역할군 및 점수 계산 함수
 const getHighestOwMMR = (profile) => {
   if (!profile) return '언랭크'
 
@@ -44,11 +44,9 @@ const getHighestOwMMR = (profile) => {
     { name: '힐', score: profile.heal_mmr || 0 },
   ]
 
-  // 점수가 높은 순으로 정렬
   roles.sort((a, b) => b.score - a.score)
 
   const highest = roles[0]
-  // 최고 점수가 1000점 이하인 경우 플레이하지 않는 포지션으로 간주하여 언랭크 처리
   if (!highest || highest.score <= 1000) {
     return '언랭크'
   }
@@ -61,6 +59,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home') // 'home' | 'training' | 'community'
 
   const [teams, setTeams] = useState([])
+  const [allProfiles, setAllProfiles] = useState([]) // 👥 전체 유저 프로필 목록 (팀별 인원 조회용)
   const [userPoints, setUserPoints] = useState(0)
 
   // 🔮 오늘의 운세 관련 상태
@@ -188,6 +187,7 @@ export default function App() {
     })
 
     fetchTeamScores()
+    fetchUserProfiles()
     fetchPosts()
 
     return () => subscription.unsubscribe()
@@ -199,6 +199,15 @@ export default function App() {
       .select('*')
       .order('total_points', { ascending: false })
     if (!error && data) setTeams(data)
+  }
+
+  // 👥 전체 유저 프로필 목록 불러오기 (팀별 멤버 조회용)
+  const fetchUserProfiles = async () => {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('points', { ascending: false })
+    if (!error && data) setAllProfiles(data)
   }
 
   const fetchPosts = async () => {
@@ -308,6 +317,7 @@ export default function App() {
           await supabase.from('team_scores').update({ total_points: newPoints }).eq('team_id', targetTeam)
           setUserPoints((prev) => prev + randomFortune.points)
           fetchTeamScores()
+          fetchUserProfiles()
         }
       }
     } catch (err) {
@@ -387,6 +397,7 @@ export default function App() {
             await supabase.from('team_scores').update({ total_points: newPoints }).eq('team_id', targetTeam)
             setUserPoints((prev) => prev + result.points)
             fetchTeamScores()
+            fetchUserProfiles()
           }
         }
       } catch (err) {
@@ -656,6 +667,7 @@ export default function App() {
       if (!updateError) {
         setUserPoints((prev) => prev + 2)
         fetchTeamScores()
+        fetchUserProfiles()
       }
     } catch (err) {
       console.error('제초 처리 중 오류 발생:', err)
@@ -800,7 +812,7 @@ export default function App() {
       </nav>
 
       {/* ========================================================= */}
-      {/* 📄 [PAGE 1] 메인 대시보드 */}
+      {/* 📄 [PAGE 1] 메인 대시보드 (팀별 소속 제자 표시 기능 추가) */}
       {/* ========================================================= */}
       {activeTab === 'home' && (
         <section className="card">
@@ -813,51 +825,96 @@ export default function App() {
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {teams.map((team, index) => (
-              <div 
-                key={team.team_id} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  padding: '12px 14px', 
-                  backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
-                  borderRadius: '12px',
-                  border: '1px solid #f1f5f9'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
-                    {index + 1}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {teams.map((team, index) => {
+              // 해당 팀 ID에 소속된 유저들 필터링
+              const teamMembers = allProfiles.filter((profile) => profile.team_id === team.team_id)
+
+              return (
+                <div 
+                  key={team.team_id} 
+                  style={{ 
+                    padding: '14px', 
+                    backgroundColor: index === 0 ? '#fafaf9' : '#f8fafc', 
+                    borderRadius: '12px',
+                    border: '1px solid #f1f5f9'
+                  }}
+                >
+                  {/* 상단 팀 헤더 (순위, 팀 아이콘, 팀 이름, 채팅 수, 점수) */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
+                        {index + 1}
+                      </div>
+
+                      <img 
+                        src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
+                        alt={team.team_name} 
+                        style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '50%', 
+                          border: '2px solid #e2e8f0',
+                          objectFit: 'cover',
+                          backgroundColor: '#fff'
+                        }} 
+                      />
+
+                      <span style={{ fontWeight: '700', fontSize: '14px' }}>{team.team_name}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MessageSquare size={13}/> {team.weekly_chats || 0}회
+                      </span>
+                      <span style={{ fontWeight: '800', color: '#d97706', fontSize: '15px' }}>
+                        {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
+                      </span>
+                    </div>
                   </div>
 
-                  <img 
-                    src={TEAM_CONFIG[team.team_id]?.image || RAKKO_MASTER_IMAGE} 
-                    alt={team.team_name} 
-                    style={{ 
-                      width: '32px', 
-                      height: '32px', 
-                      borderRadius: '50%', 
-                      border: '2px solid #e2e8f0',
-                      objectFit: 'cover',
-                      backgroundColor: '#fff'
-                    }} 
-                  />
+                  {/* 👥 하단 소속 팀원(제자) 목록 칩 표기 영역 */}
+                  <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginRight: '2px' }}>
+                      소속 제자 ({teamMembers.length}명):
+                    </span>
 
-                  <span style={{ fontWeight: '700', fontSize: '14px' }}>{team.team_name}</span>
+                    {teamMembers.length === 0 ? (
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>아직 소속된 제자가 없습니다.</span>
+                    ) : (
+                      teamMembers.map((member) => (
+                        <div 
+                          key={member.id || member.user_id || member.discord_id}
+                          onClick={() => handleOpenProfileModal(member.user_id, member.username, member.avatar_url)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: '#fff',
+                            border: '1px solid #cbd5e1',
+                            padding: '3px 8px',
+                            borderRadius: '14px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            color: '#334155',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title={`${member.username} 제자 프로필 보기`}
+                        >
+                          <img 
+                            src={member.avatar_url || RAKKO_MASTER_IMAGE} 
+                            alt="" 
+                            style={{ width: '15px', height: '15px', borderRadius: '50%', objectFit: 'cover' }} 
+                          />
+                          <span>{member.username}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <MessageSquare size={13}/> {team.weekly_chats || 0}회
-                  </span>
-                  <span style={{ fontWeight: '800', color: '#d97706', fontSize: '15px' }}>
-                    {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
-                  </span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}
@@ -1489,7 +1546,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 게임 전적 정보 (탱/딜/힐 중 최고점 자동 표기) */}
+                {/* 게임 전적 정보 */}
                 <div style={{ marginBottom: '14px' }}>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Gamepad2 size={13} color="#3b82f6" /> 게임 전적 / 티어
@@ -1499,7 +1556,6 @@ export default function App() {
                     <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
                       <div style={{ fontSize: '10px', color: '#64748b' }}>오버워치</div>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#0284c7', marginTop: '2px' }}>
-                        {/* 탱/딜/힐 중 가장 높은 역할군 및 점수 산출 */}
                         {getHighestOwMMR(selectedProfileModal.profile)}
                       </div>
                     </div>
