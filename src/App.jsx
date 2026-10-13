@@ -21,17 +21,17 @@ const FORTUNES = [
   { grade: '대길 🌟', quote: '오늘 너의 검 끝은 매섭군! 무슨 일이든 당당하게 임하라.', points: 5 },
   { grade: '중길 ⚔️', quote: '기본 자세가 제일 중요하다. 방심하지 마라!', points: 3 },
   { grade: '소길 🍨', quote: '달콤한 파르페를 먹으면 오늘은 기분 좋은 일이 생길 것이다.', points: 2 },
-  { grade: '평길 🍵', quote: '쉬는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
+  { grade: '평길 🍵', quote: '쉬  는 것도 수련의 일부다. 따뜻한 차 한 잔의 여유를 가져라.', points: 1 },
   { grade: '말길 🍃', quote: '과자는 적당히 먹고, 제초 수련부터 차근차근 시작해라.', points: 1 },
 ]
 
 // 🏅 포인트 구간별 자동 칭호 산정 함수
 const getTitleByPoints = (points = 0) => {
-  if (points >= 200) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
-  if (points >= 100) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
-  if (points >= 50) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
-  if (points >= 20) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
-  return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
+  if (points >= 1500000) return { name: '👑 랏코의 오른팔', color: '#8b5cf6', bg: '#f3e8ff' }
+  if (points >= 1000000) return { name: '⚔️ 랏코의 수제자', color: '#d97706', bg: '#fef3c7' }
+  if (points >= 500000) return { name: '🍨 파르페 중독자', color: '#ec4899', bg: '#fce7f3' }
+  if (points >= 200000) return { name: '🌱 1급 제초사', color: '#16a34a', bg: '#dcfce7' }
+  return { name: '🌱 5급 제초사', color: '#64748b', bg: '#f1f5f9' }
 }
 
 // 🛡️ 오버워치 최고 역할군 및 점수 계산 함수
