@@ -87,7 +87,7 @@ const getTimeStr = (dateStr) => {
   if (parts.length >= 2) {
     const hh = parts[0].padStart(2, '0')
     const mm = parts[1].padStart(2, '0')
-    if (hh === '00' && mm === '00') return '' // 자정 기본값 제외
+    if (hh === '00' && mm === '00') return ''
     return `${hh}:${mm}`
   }
   return ''
@@ -125,6 +125,15 @@ export default function App() {
   const [subjugationResult, setSubjugationResult] = useState(null)
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
+
+  // 🌿 제초 매크로 방지 관련 상태
+  const [weedingCooldown, setWeedingCooldown] = useState(0)
+  const [weedingQuizModal, setWeedingQuizModal] = useState({
+    isOpen: false,
+    num1: 0,
+    num2: 0,
+    userAnswer: ''
+  })
 
   // 🎴 제자 프로필 모달 상태
   const [selectedProfileModal, setSelectedProfileModal] = useState({
@@ -250,6 +259,16 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // 🌿 제초 쿨타임 타이머 관리 Effect
+  useEffect(() => {
+    if (weedingCooldown > 0) {
+      const timer = setInterval(() => {
+        setWeedingCooldown((prev) => prev - 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [weedingCooldown])
+
   const fetchTeamScores = async () => {
     const { data, error } = await supabase
       .from('team_scores')
@@ -274,7 +293,6 @@ export default function App() {
     if (!error && data) setPosts(data)
   }
 
-  // 📅 DB 일정 + 프로필 생일 불러오기
   const fetchSchedules = async () => {
     try {
       const { data: scheduleData, error: scheduleError } = await supabase
@@ -498,6 +516,92 @@ export default function App() {
     }
   }
 
+  // 🌿 1. 제초 버튼 클릭 시 퀴즈 모달 오픈
+  const handleOpenWeedingQuiz = () => {
+    if (!session) {
+      alert('로그인이 필요한 수련입니다!')
+      return
+    }
+    if (weedingCooldown > 0) {
+      alert(`휴식 중입니다! (${weedingCooldown}초 후 다시 시도하세요)`)
+      return
+    }
+
+    const n1 = Math.floor(Math.random() * 20) + 1
+    const n2 = Math.floor(Math.random() * 20) + 1
+    
+    setWeedingQuizModal({
+      isOpen: true,
+      num1: n1,
+      num2: n2,
+      userAnswer: ''
+    })
+  }
+
+  // 🌿 2. 퀴즈 검증 후 실제 제초 수련 진행
+  const handleVerifyAndWeed = async (e) => {
+    e.preventDefault()
+    const expected = weedingQuizModal.num1 + weedingQuizModal.num2
+    
+    if (parseInt(weedingQuizModal.userAnswer.trim(), 10) !== expected) {
+      alert('⚠️ 오답입니다! 랏코 스승님의 검수를 통과하지 못했습니다.')
+      setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })
+      return
+    }
+
+    setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })
+    setWeedingCooldown(3) // 3초 쿨타임 시작
+
+    await handleWeeding()
+  }
+
+  // 🌿 3. Supabase DB 제초 포인트 추가
+  const handleWeeding = async () => {
+    try {
+      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('team_id')
+        .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
+        .maybeSingle()
+
+      if (!profile || !profile.team_id) {
+        alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.\n디스코드 서버에서 먼저 종족 역할을 부여받고 채팅을 남겨주세요!')
+        return
+      }
+
+      const targetTeam = profile.team_id
+
+      const { data: teamData } = await supabase
+        .from('team_scores')
+        .select('total_points')
+        .eq('team_id', targetTeam)
+        .maybeSingle()
+
+      if (!teamData) {
+        alert('해당 팀의 점수 데이터를 찾을 수 없습니다.')
+        return
+      }
+
+      const currentPoints = teamData.total_points || 0
+      const newPoints = currentPoints + 2
+
+      const { error: updateError } = await supabase
+        .from('team_scores')
+        .update({ total_points: newPoints })
+        .eq('team_id', targetTeam)
+
+      if (!updateError) {
+        setUserPoints((prev) => prev + 2)
+        fetchTeamScores()
+        fetchUserProfiles()
+      }
+    } catch (err) {
+      console.error('제초 처리 중 오류 발생:', err)
+    }
+  }
+
   const fetchCommentsForPost = async (postId) => {
     const { data, error } = await supabase
       .from('comments')
@@ -712,57 +816,6 @@ export default function App() {
 
     if (!error) {
       fetchPosts()
-    }
-  }
-
-  const handleWeeding = async () => {
-    if (!session) {
-      alert('로그인이 필요한 수련입니다!')
-      return
-    }
-
-    try {
-      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('team_id')
-        .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-        .maybeSingle()
-
-      if (!profile || !profile.team_id) {
-        alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.\n디스코드 서버에서 먼저 종족 역할을 부여받고 채팅을 남겨주세요!')
-        return
-      }
-
-      const targetTeam = profile.team_id
-
-      const { data: teamData } = await supabase
-        .from('team_scores')
-        .select('total_points')
-        .eq('team_id', targetTeam)
-        .maybeSingle()
-
-      if (!teamData) {
-        alert('해당 팀의 점수 데이터를 찾을 수 없습니다.')
-        return
-      }
-
-      const currentPoints = teamData.total_points || 0
-      const newPoints = currentPoints + 2
-
-      const { error: updateError } = await supabase
-        .from('team_scores')
-        .update({ total_points: newPoints })
-        .eq('team_id', targetTeam)
-
-      if (!updateError) {
-        setUserPoints((prev) => prev + 2)
-        fetchTeamScores()
-        fetchUserProfiles()
-      }
-    } catch (err) {
-      console.error('제초 처리 중 오류 발생:', err)
     }
   }
 
@@ -1183,11 +1236,21 @@ export default function App() {
                   <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
                 </h2>
                 <p style={{ margin: 0, color: '#15803d', fontSize: '13px' }}>
-                  잡초를 뽑아 팀 포인트를 모으세요.
+                  잡초를 뽑아 팀 포인트를 모으세요. (매크로 방지 검수 적용)
                 </p>
               </div>
-              <button onClick={handleWeeding} className="btn-weed" style={{ padding: '8px 12px', fontSize: '13px' }}>
-                <Flame size={16} /> 잡초 뽑기 (+2 pt)
+              <button 
+                onClick={handleOpenWeedingQuiz} 
+                disabled={weedingCooldown > 0}
+                className="btn-weed" 
+                style={{ 
+                  padding: '8px 12px', 
+                  fontSize: '13px',
+                  opacity: weedingCooldown > 0 ? 0.6 : 1,
+                  cursor: weedingCooldown > 0 ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <Flame size={16} /> {weedingCooldown > 0 ? `${weedingCooldown}초 대기...` : '잡초 뽑기 (+2 pt)'}
               </button>
             </div>
 
@@ -1710,7 +1773,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🎴 [MODAL] 제자 프로필 카카오톡 모달 */}
+      {/* 🎴 [MODAL 1] 제자 프로필 카카오톡 모달 */}
       {/* ========================================================= */}
       {selectedProfileModal.isOpen && (
         <div 
@@ -1878,6 +1941,107 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 🌿 [MODAL 2] 제초 매크로 방지 산수 퀴즈 모달 */}
+      {/* ========================================================= */}
+      {weedingQuizModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '16px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '320px',
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            padding: '20px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
+            textAlign: 'center'
+          }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', color: '#166534' }}>
+              🌱 랏코 스승의 제초 검수
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#475569' }}>
+              잡초를 뽑기 전에 아래 계산을 입력하세요!
+            </p>
+
+            <form onSubmit={handleVerifyAndWeed}>
+              <div style={{
+                background: '#f0fdf4',
+                border: '2px dashed #86efac',
+                borderRadius: '12px',
+                padding: '12px',
+                fontSize: '20px',
+                fontWeight: '900',
+                color: '#15803d',
+                marginBottom: '14px'
+              }}>
+                {weedingQuizModal.num1} + {weedingQuizModal.num2} = ?
+              </div>
+
+              <input
+                type="number"
+                autoFocus
+                placeholder="정답 입력"
+                value={weedingQuizModal.userAnswer}
+                onChange={(e) => setWeedingQuizModal({ ...weedingQuizModal, userAnswer: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '15px',
+                  textAlign: 'center',
+                  boxSizing: 'border-box',
+                  marginBottom: '12px'
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#16a34a',
+                    color: '#fff',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  확인
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
