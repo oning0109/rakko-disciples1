@@ -322,7 +322,6 @@ export default function App() {
             })
             .eq('team_id', targetTeam)
 
-          // 내 팀 정보 로컬 최신화
           setMyTeamInfo((prev) => prev ? { ...prev, total_points: newTeamPoints, weed_count: newTeamWeedCount } : null)
         }
       }
@@ -535,15 +534,13 @@ export default function App() {
       alert('로그인이 필요한 수련입니다!')
       return
     }
-    if (weedingCooldown) return // 0.2초 쿨타임 유지를 위한 차단
+    if (weedingCooldown) return
 
-    // 🛑 개인 하루 1,000pt 한도 검사
     if (dailyWeedPoints >= 1000) {
       alert('⚠️ 오늘 획득 가능한 개인 최대 제초 포인트(1,000 pt)를 모두 달성하셨습니다! 내일 다시 도전해 주세요.')
       return
     }
 
-    // 최신 팀 제초 횟수 가져오기
     const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
     const { data: profile } = await supabase
       .from('user_profiles')
@@ -565,7 +562,6 @@ export default function App() {
     const currentTeamWeedCount = teamData?.weed_count || 0
     const nextTeamCount = currentTeamWeedCount + 1
 
-    // 🎯 팀 전체 합산 1,000번째마다 산수 퀴즈 모달 팝업
     if (nextTeamCount > 0 && nextTeamCount % 1000 === 0) {
       const n1 = Math.floor(Math.random() * 20) + 1
       const n2 = Math.floor(Math.random() * 20) + 1
@@ -616,7 +612,6 @@ export default function App() {
       console.error('로컬 스토리지 저장 실패:', err)
     }
 
-    // isWeeding = true 로 넘겨 팀 전체 weed_count 1 증가
     await updateUserAndTeamPoints(2, true)
   }
 
@@ -1060,6 +1055,9 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MessageSquare size={13}/> {(team.weekly_chats || 0).toLocaleString()}회
+                      </span>
                       <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         🌱 제초: {(team.weed_count || 0).toLocaleString()}회
                       </span>
