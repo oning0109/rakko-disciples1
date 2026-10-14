@@ -59,7 +59,7 @@ const getHighestOwMMR = (profile) => {
   return `${highest.name} ${highest.score} pt`
 }
 
-// 📅 날짜 문자열에서 'MM-DD' (예: '05-05', '11-05')만 추출하는 함수
+// 📅 날짜 문자열에서 'MM-DD' 추출 함수
 const getMMDD = (dateStr) => {
   if (!dateStr) return ''
   const clean = String(dateStr).split('T')[0].split(' ')[0].trim()
@@ -72,7 +72,7 @@ const getMMDD = (dateStr) => {
   return ''
 }
 
-// ⏰ 시간 문자열 (HH:MM) 추출 함수 (생일 제외용)
+// ⏰ 시간 문자열 (HH:MM) 추출 함수
 const getTimeStr = (dateStr) => {
   if (!dateStr) return ''
   const str = String(dateStr).trim()
@@ -119,21 +119,14 @@ export default function App() {
   const [todayFortune, setTodayFortune] = useState(null)
   const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
 
-  // 🗡️ 토벌 수련 관련 상태 (무제한 다시하기 지원)
+  // 🗡️ 토벌 수련 관련 상태
   const [subjugationStatus, setSubjugationStatus] = useState('idle')
   const [subjugationResult, setSubjugationResult] = useState(null)
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
 
-  // 🌿 제초 횟수, 일일 제한(1,000pt) 및 0.2초 딜레이 상태
-  const [weedingCount, setWeedingCount] = useState(() => {
-    try {
-      const saved = localStorage.getItem('rakko_weeding_count')
-      return saved ? parseInt(saved, 10) : 0
-    } catch {
-      return 0
-    }
-  })
+  // 🌿 제초 관련 상태 (팀별 제초 횟수 + 0.2초 연타 차단)
+  const [myTeamInfo, setMyTeamInfo] = useState(null)
   const [dailyWeedPoints, setDailyWeedPoints] = useState(() => {
     try {
       const todayStr = new Date().toISOString().slice(0, 10)
@@ -147,12 +140,13 @@ export default function App() {
       return 0
     }
   })
-  const [weedingCooldown, setWeedingCooldown] = useState(false) // 0.2초 연타 방지 플래그
+  const [weedingCooldown, setWeedingCooldown] = useState(false)
   const [weedingQuizModal, setWeedingQuizModal] = useState({
     isOpen: false,
     num1: 0,
     num2: 0,
-    userAnswer: ''
+    userAnswer: '',
+    targetNextCount: 0
   })
 
   // 🎴 제자 프로필 모달 상태
@@ -237,6 +231,7 @@ export default function App() {
 
           if (existingProfile.team_id) {
             setPostTeam(existingProfile.team_id)
+            fetchMyTeamInfo(existingProfile.team_id)
           }
         } else {
           await supabase.from('user_profiles').insert({
@@ -271,14 +266,24 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // 🌟 공통 포인트 업데이트 함수 (유저 프로필 + 팀 스코어 동시 업데이트)
-  const updateUserAndTeamPoints = async (pointsToAdd) => {
+  const fetchMyTeamInfo = async (teamId) => {
+    if (!teamId) return
+    const { data } = await supabase
+      .from('team_scores')
+      .select('*')
+      .eq('team_id', teamId)
+      .maybeSingle()
+
+    if (data) setMyTeamInfo(data)
+  }
+
+  // 🌟 공통 포인트 및 팀 제초 횟수 동시 업데이트 함수
+  const updateUserAndTeamPoints = async (pointsToAdd, isWeeding = false) => {
     if (!session) return
     try {
       const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
       const userId = session.user.id
 
-      // 1. 유저 프로필 조회
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('team_id, points')
@@ -291,30 +296,37 @@ export default function App() {
       const currentProfPoints = profile.points || 0
       const newProfPoints = currentProfPoints + pointsToAdd
 
-      // 2. user_profiles 테이블 points 업데이트
+      // 1. 유저 개인 프로필 점수 업데이트
       await supabase
         .from('user_profiles')
         .update({ points: newProfPoints })
         .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
 
-      // 3. team_scores 테이블 total_points 업데이트
+      // 2. 팀 점수 및 팀 제초 횟수 DB 업데이트
       if (targetTeam) {
         const { data: teamData } = await supabase
           .from('team_scores')
-          .select('total_points')
+          .select('total_points, weed_count')
           .eq('team_id', targetTeam)
           .maybeSingle()
 
         if (teamData) {
           const newTeamPoints = (teamData.total_points || 0) + pointsToAdd
+          const newTeamWeedCount = isWeeding ? (teamData.weed_count || 0) + 1 : (teamData.weed_count || 0)
+
           await supabase
             .from('team_scores')
-            .update({ total_points: newTeamPoints })
+            .update({ 
+              total_points: newTeamPoints,
+              weed_count: newTeamWeedCount 
+            })
             .eq('team_id', targetTeam)
+
+          // 내 팀 정보 로컬 최신화
+          setMyTeamInfo((prev) => prev ? { ...prev, total_points: newTeamPoints, weed_count: newTeamWeedCount } : null)
         }
       }
 
-      // 4. 로컬 UI 최신화
       setUserPoints((prev) => prev + pointsToAdd)
       fetchTeamScores()
       fetchUserProfiles()
@@ -462,7 +474,7 @@ export default function App() {
     localStorage.setItem('rakko_fortune_date', todayStr)
     localStorage.setItem('rakko_fortune_data', JSON.stringify(randomFortune))
 
-    await updateUserAndTeamPoints(randomFortune.points)
+    await updateUserAndTeamPoints(randomFortune.points, false)
   }
 
   // 🗡️ 토벌 수련 시작
@@ -507,7 +519,7 @@ export default function App() {
       setSubjugationResult(result)
       setSubjugationStatus('finished')
 
-      await updateUserAndTeamPoints(result.points)
+      await updateUserAndTeamPoints(result.points, false)
     }
   }
 
@@ -517,7 +529,7 @@ export default function App() {
     setSubjugationResult(null)
   }
 
-  // 🌿 1. 잡초 뽑기 클릭 핸들러 (하루 1,000pt 제한 + 0.2초 딜레이 + 1,000회당 1번 매크로 검수)
+  // 🌿 1. 잡초 뽑기 클릭 핸들러 (팀 전체 누적 1,000번 주기로 산수 퀴즈)
   const handleWeedingClick = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -525,16 +537,36 @@ export default function App() {
     }
     if (weedingCooldown) return // 0.2초 쿨타임 유지를 위한 차단
 
-    // 🛑 하루 1,000pt 한도 검사
+    // 🛑 개인 하루 1,000pt 한도 검사
     if (dailyWeedPoints >= 1000) {
-      alert('⚠️ 오늘 획득 가능한 최대 제초 포인트(1,000 pt)를 모두 달성하셨습니다! 내일 다시 도전해 주세요.')
+      alert('⚠️ 오늘 획득 가능한 개인 최대 제초 포인트(1,000 pt)를 모두 달성하셨습니다! 내일 다시 도전해 주세요.')
       return
     }
 
-    const nextCount = weedingCount + 1
+    // 최신 팀 제초 횟수 가져오기
+    const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('team_id')
+      .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
+      .maybeSingle()
 
-    // 🎯 1,000번째마다 산수 퀴즈 모달 팝업
-    if (nextCount > 0 && nextCount % 1000 === 0) {
+    if (!profile || !profile.team_id) {
+      alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.')
+      return
+    }
+
+    const { data: teamData } = await supabase
+      .from('team_scores')
+      .select('weed_count')
+      .eq('team_id', profile.team_id)
+      .maybeSingle()
+
+    const currentTeamWeedCount = teamData?.weed_count || 0
+    const nextTeamCount = currentTeamWeedCount + 1
+
+    // 🎯 팀 전체 합산 1,000번째마다 산수 퀴즈 모달 팝업
+    if (nextTeamCount > 0 && nextTeamCount % 1000 === 0) {
       const n1 = Math.floor(Math.random() * 20) + 1
       const n2 = Math.floor(Math.random() * 20) + 1
       
@@ -542,51 +574,50 @@ export default function App() {
         isOpen: true,
         num1: n1,
         num2: n2,
-        userAnswer: ''
+        userAnswer: '',
+        targetNextCount: nextTeamCount
       })
     } else {
-      await executeWeeding(nextCount)
+      await executeWeeding()
     }
   }
 
-  // 🌿 2. 매크로 퀴즈 제출 시 실행
+  // 🌿 2. 팀 1,000번째 매크로 퀴즈 제출 시 실행
   const handleVerifyAndWeed = async (e) => {
     e.preventDefault()
     const expected = weedingQuizModal.num1 + weedingQuizModal.num2
     
     if (parseInt(weedingQuizModal.userAnswer.trim(), 10) !== expected) {
       alert('⚠️ 오답입니다! 랏코 스승님의 검수를 통과하지 못했습니다.')
-      setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })
+      setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '', targetNextCount: 0 })
       return
     }
 
-    setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })
-    const nextCount = weedingCount + 1
-    await executeWeeding(nextCount)
+    setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '', targetNextCount: 0 })
+    await executeWeeding()
   }
 
-  // 🌿 3. 제초 실제 포인트 적립 및 0.2초(200ms) 딜레이 적용
-  const executeWeeding = async (nextCount) => {
+  // 🌿 3. 제초 포인트 및 팀 전체 횟수 1 증가 (0.2초 쿨타임)
+  const executeWeeding = async () => {
     setWeedingCooldown(true)
     setTimeout(() => {
       setWeedingCooldown(false)
-    }, 200) // 0.2초 쿨타임
+    }, 200)
 
     const newDailyPts = dailyWeedPoints + 2
     const todayStr = new Date().toISOString().slice(0, 10)
 
     setDailyWeedPoints(newDailyPts)
-    setWeedingCount(nextCount)
 
     try {
       localStorage.setItem('rakko_weed_daily_date', todayStr)
       localStorage.setItem('rakko_weed_daily_pts', newDailyPts.toString())
-      localStorage.setItem('rakko_weeding_count', nextCount.toString())
     } catch (err) {
       console.error('로컬 스토리지 저장 실패:', err)
     }
 
-    await updateUserAndTeamPoints(2)
+    // isWeeding = true 로 넘겨 팀 전체 weed_count 1 증가
+    await updateUserAndTeamPoints(2, true)
   }
 
   const fetchCommentsForPost = async (postId) => {
@@ -833,6 +864,8 @@ export default function App() {
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1))
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
 
+  const currentTeamWeedCount = myTeamInfo?.weed_count || 0
+
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '20px 16px' }}>
       {/* 1. 상단 프로필 & 헤더 */}
@@ -1028,7 +1061,7 @@ export default function App() {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
                       <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <MessageSquare size={13}/> {team.weekly_chats || 0}회
+                        🌱 제초: {(team.weed_count || 0).toLocaleString()}회
                       </span>
                       <span style={{ fontWeight: '800', color: '#d97706', fontSize: '15px' }}>
                         {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
@@ -1245,7 +1278,7 @@ export default function App() {
                   <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
                 </h2>
                 <p style={{ margin: 0, color: '#15803d', fontSize: '13px' }}>
-                  잡초를 뽑아 팀 포인트를 모으세요. (하루 최대 1,000 pt 제한 / 0.2초 쿨타임)
+                  잡초를 뽑아 팀 포인트를 모으세요. (팀 합산 1,000회당 스승님 검수 / 0.2초 쿨타임)
                 </p>
               </div>
               <button 
@@ -1259,15 +1292,15 @@ export default function App() {
                   cursor: (weedingCooldown || dailyWeedPoints >= 1000) ? 'not-allowed' : 'pointer'
                 }}
               >
-                <Flame size={16} /> {dailyWeedPoints >= 1000 ? '오늘 한도 달성' : weedingCooldown ? '대기 중...' : '잡초 뽑기 (+2 pt)'}
+                <Flame size={16} /> {dailyWeedPoints >= 1000 ? '개인 한도 달성' : weedingCooldown ? '대기 중...' : '잡초 뽑기 (+2 pt)'}
               </button>
             </div>
 
             {session && (
               <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                <div>오늘 제초 획득 포인트: <b>{dailyWeedPoints.toLocaleString()}</b> / 1,000 pt</div>
+                <div>오늘 내 제초 획득 포인트: <b>{dailyWeedPoints.toLocaleString()}</b> / 1,000 pt</div>
                 <div style={{ fontSize: '12px', color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #86efac' }}>
-                  누적 제초: <b>{weedingCount.toLocaleString()}</b>회 (다음 검수: <b>{1000 - (weedingCount % 1000)}</b>회 남음)
+                  팀 총 제초: <b>{currentTeamWeedCount.toLocaleString()}</b>회 (다음 검수: <b>{1000 - (currentTeamWeedCount % 1000)}</b>회 남음)
                 </div>
               </div>
             )}
@@ -1958,7 +1991,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🌿 [MODAL 2] 1,000회 주기 매크로 방지 산수 퀴즈 모달 */}
+      {/* 🌿 [MODAL 2] 팀 전체 누적 1,000회 주기 매크로 방지 산수 퀴즈 모달 */}
       {/* ========================================================= */}
       {weedingQuizModal.isOpen && (
         <div style={{
@@ -1982,10 +2015,10 @@ export default function App() {
             textAlign: 'center'
           }}>
             <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', color: '#166534' }}>
-              🌱 랏코 스승의 1,000회 제초 검수
+              🌱 랏코 스승의 팀 1,000회 제초 검수
             </h3>
             <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#475569' }}>
-              1,000번째 제초 달성! 아래 계산을 입력하세요.
+              우리 팀의 {weedingQuizModal.targetNextCount.toLocaleString()}번째 제초 달성! 아래 계산을 입력하세요.
             </p>
 
             <form onSubmit={handleVerifyAndWeed}>
@@ -2023,7 +2056,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })}
+                  onClick={() => setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '', targetNextCount: 0 })}
                   style={{
                     flex: 1,
                     padding: '10px',
