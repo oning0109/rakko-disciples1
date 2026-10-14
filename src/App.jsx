@@ -125,21 +125,9 @@ export default function App() {
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
 
-  // 🌿 제초 관련 상태 (팀별 제초 횟수 + 0.2초 연타 차단)
+  // 🌿 제초 관련 상태 (DB daily_weed_pts 연동)
   const [myTeamInfo, setMyTeamInfo] = useState(null)
-  const [dailyWeedPoints, setDailyWeedPoints] = useState(() => {
-    try {
-      const todayStr = new Date().toISOString().slice(0, 10)
-      const savedDate = localStorage.getItem('rakko_weed_daily_date')
-      const savedPts = localStorage.getItem('rakko_weed_daily_pts')
-      if (savedDate === todayStr && savedPts) {
-        return parseInt(savedPts, 10)
-      }
-      return 0
-    } catch {
-      return 0
-    }
-  })
+  const [dailyWeedPoints, setDailyWeedPoints] = useState(0)
   const [weedingCooldown, setWeedingCooldown] = useState(false)
   const [weedingQuizModal, setWeedingQuizModal] = useState({
     isOpen: false,
@@ -214,7 +202,7 @@ export default function App() {
         const { data: profiles, error } = await supabase
           .from('user_profiles')
           .select('*')
-          .eq('discord_id', discordId)
+          .or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
 
         if (error) {
           console.error('프로필 조회 실패:', error.message)
@@ -224,10 +212,27 @@ export default function App() {
         const existingProfile = profiles && profiles.length > 0 ? profiles[0] : null
 
         if (existingProfile) {
-          await supabase.from('user_profiles').update({
-            username: username,
-            avatar_url: avatarUrl
-          }).eq('discord_id', discordId)
+          // 🌟 DB의 daily_weed_date 확인 후 날짜가 바뀌었으면 0으로 리셋, 당일이면 DB 수치 그대로 사용
+          const dbWeedDate = existingProfile.daily_weed_date ? String(existingProfile.daily_weed_date).split('T')[0] : ''
+          let currentDailyWeedPts = existingProfile.daily_weed_pts || 0
+
+          if (dbWeedDate !== todayStr) {
+            currentDailyWeedPts = 0
+            await supabase.from('user_profiles').update({
+              daily_weed_pts: 0,
+              daily_weed_date: todayStr,
+              username: username,
+              avatar_url: avatarUrl
+            }).or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
+          } else {
+            await supabase.from('user_profiles').update({
+              username: username,
+              avatar_url: avatarUrl
+            }).or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
+          }
+
+          setDailyWeedPoints(currentDailyWeedPts)
+          setUserPoints(existingProfile.points || 0)
 
           if (existingProfile.team_id) {
             setPostTeam(existingProfile.team_id)
@@ -240,8 +245,11 @@ export default function App() {
             username: username,
             avatar_url: avatarUrl,
             points: 0,
-            chat_count: 0
+            chat_count: 0,
+            daily_weed_pts: 0,
+            daily_weed_date: todayStr
           })
+          setDailyWeedPoints(0)
         }
       } catch (err) {
         console.error('프로필 동기화 중 예외 발생:', err)
@@ -277,16 +285,17 @@ export default function App() {
     if (data) setMyTeamInfo(data)
   }
 
-  // 🌟 공통 포인트 및 팀 제초 횟수 동시 업데이트 함수
+  // 🌟 공통 포인트 및 팀/개인 제초 DB 동시 업데이트 함수
   const updateUserAndTeamPoints = async (pointsToAdd, isWeeding = false) => {
     if (!session) return
     try {
       const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
       const userId = session.user.id
+      const todayStr = new Date().toISOString().slice(0, 10)
 
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('team_id, points')
+        .select('team_id, points, daily_weed_pts')
         .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
         .maybeSingle()
 
@@ -296,10 +305,20 @@ export default function App() {
       const currentProfPoints = profile.points || 0
       const newProfPoints = currentProfPoints + pointsToAdd
 
-      // 1. 유저 개인 프로필 점수 업데이트
+      let newDailyWeedPts = profile.daily_weed_pts || 0
+      if (isWeeding) {
+        newDailyWeedPts += pointsToAdd
+        setDailyWeedPoints(newDailyWeedPts)
+      }
+
+      // 1. 유저 개인 프로필 DB 업데이트
       await supabase
         .from('user_profiles')
-        .update({ points: newProfPoints })
+        .update({ 
+          points: newProfPoints,
+          daily_weed_pts: newDailyWeedPts,
+          daily_weed_date: todayStr
+        })
         .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
 
       // 2. 팀 점수 및 팀 제초 횟수 DB 업데이트
@@ -528,7 +547,7 @@ export default function App() {
     setSubjugationResult(null)
   }
 
-  // 🌿 1. 잡초 뽑기 클릭 핸들러 (팀 전체 누적 1,000번 주기로 산수 퀴즈)
+  // 🌿 1. 잡초 뽑기 클릭 핸들러 (팀 전체 누적 1,000회 주기로 산수 퀴즈)
   const handleWeedingClick = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -599,18 +618,6 @@ export default function App() {
     setTimeout(() => {
       setWeedingCooldown(false)
     }, 200)
-
-    const newDailyPts = dailyWeedPoints + 2
-    const todayStr = new Date().toISOString().slice(0, 10)
-
-    setDailyWeedPoints(newDailyPts)
-
-    try {
-      localStorage.setItem('rakko_weed_daily_date', todayStr)
-      localStorage.setItem('rakko_weed_daily_pts', newDailyPts.toString())
-    } catch (err) {
-      console.error('로컬 스토리지 저장 실패:', err)
-    }
 
     await updateUserAndTeamPoints(2, true)
   }
