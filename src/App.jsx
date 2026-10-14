@@ -125,7 +125,7 @@ export default function App() {
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
 
-  // 🌿 제초 횟수 및 일일 제한(1,000pt) 관련 상태
+  // 🌿 제초 횟수, 일일 제한(1,000pt) 및 0.2초 딜레이 상태
   const [weedingCount, setWeedingCount] = useState(() => {
     try {
       const saved = localStorage.getItem('rakko_weeding_count')
@@ -147,7 +147,7 @@ export default function App() {
       return 0
     }
   })
-  const [weedingCooldown, setWeedingCooldown] = useState(0)
+  const [weedingCooldown, setWeedingCooldown] = useState(false) // 0.2초 연타 방지 플래그
   const [weedingQuizModal, setWeedingQuizModal] = useState({
     isOpen: false,
     num1: 0,
@@ -271,17 +271,7 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // 🌿 제초 쿨타임 타이머 관리 Effect
-  useEffect(() => {
-    if (weedingCooldown > 0) {
-      const timer = setInterval(() => {
-        setWeedingCooldown((prev) => prev - 1)
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-  }, [weedingCooldown])
-
-  // 🌟 공통 포인트 업데이트 함수 (유저 프로필 + 팀 스코어 동시 업데이트로 프로필 카드 누적 포인트 문제 해결)
+  // 🌟 공통 포인트 업데이트 함수 (유저 프로필 + 팀 스코어 동시 업데이트)
   const updateUserAndTeamPoints = async (pointsToAdd) => {
     if (!session) return
     try {
@@ -301,7 +291,7 @@ export default function App() {
       const currentProfPoints = profile.points || 0
       const newProfPoints = currentProfPoints + pointsToAdd
 
-      // 2. user_profiles 테이블 points 업데이트 (프로필 카드 정상 노출)
+      // 2. user_profiles 테이블 points 업데이트
       await supabase
         .from('user_profiles')
         .update({ points: newProfPoints })
@@ -527,16 +517,13 @@ export default function App() {
     setSubjugationResult(null)
   }
 
-  // 🌿 1. 잡초 뽑기 클릭 핸들러 (하루 1,000pt 제한 + 1,000회당 1번 매크로 검수)
+  // 🌿 1. 잡초 뽑기 클릭 핸들러 (하루 1,000pt 제한 + 0.2초 딜레이 + 1,000회당 1번 매크로 검수)
   const handleWeedingClick = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
       return
     }
-    if (weedingCooldown > 0) {
-      alert(`휴식 중입니다! (${weedingCooldown}초 후 다시 시도하세요)`)
-      return
-    }
+    if (weedingCooldown) return // 0.2초 쿨타임 유지를 위한 차단
 
     // 🛑 하루 1,000pt 한도 검사
     if (dailyWeedPoints >= 1000) {
@@ -578,9 +565,12 @@ export default function App() {
     await executeWeeding(nextCount)
   }
 
-  // 🌿 3. 제초 실제 포인트 적립 실행
+  // 🌿 3. 제초 실제 포인트 적립 및 0.2초(200ms) 딜레이 적용
   const executeWeeding = async (nextCount) => {
-    setWeedingCooldown(3) // 3초 쿨타임 적용
+    setWeedingCooldown(true)
+    setTimeout(() => {
+      setWeedingCooldown(false)
+    }, 200) // 0.2초 쿨타임
 
     const newDailyPts = dailyWeedPoints + 2
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -1255,21 +1245,21 @@ export default function App() {
                   <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
                 </h2>
                 <p style={{ margin: 0, color: '#15803d', fontSize: '13px' }}>
-                  잡초를 뽑아 팀 포인트를 모으세요. (하루 최대 1,000 pt 제한)
+                  잡초를 뽑아 팀 포인트를 모으세요. (하루 최대 1,000 pt 제한 / 0.2초 쿨타임)
                 </p>
               </div>
               <button 
                 onClick={handleWeedingClick} 
-                disabled={weedingCooldown > 0 || dailyWeedPoints >= 1000}
+                disabled={weedingCooldown || dailyWeedPoints >= 1000}
                 className="btn-weed" 
                 style={{ 
                   padding: '8px 12px', 
                   fontSize: '13px',
-                  opacity: (weedingCooldown > 0 || dailyWeedPoints >= 1000) ? 0.6 : 1,
-                  cursor: (weedingCooldown > 0 || dailyWeedPoints >= 1000) ? 'not-allowed' : 'pointer'
+                  opacity: (weedingCooldown || dailyWeedPoints >= 1000) ? 0.6 : 1,
+                  cursor: (weedingCooldown || dailyWeedPoints >= 1000) ? 'not-allowed' : 'pointer'
                 }}
               >
-                <Flame size={16} /> {dailyWeedPoints >= 1000 ? '오늘 한도 달성' : weedingCooldown > 0 ? `${weedingCooldown}초 대기...` : '잡초 뽑기 (+2 pt)'}
+                <Flame size={16} /> {dailyWeedPoints >= 1000 ? '오늘 한도 달성' : weedingCooldown ? '대기 중...' : '잡초 뽑기 (+2 pt)'}
               </button>
             </div>
 
