@@ -4,7 +4,7 @@ import {
   Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, 
   Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, 
   Gift, LayoutDashboard, Target, Swords, Gamepad2, FileText, 
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight 
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight, RotateCcw
 } from 'lucide-react'
 
 // 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 로컬 PNG)
@@ -119,14 +119,34 @@ export default function App() {
   const [todayFortune, setTodayFortune] = useState(null)
   const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
 
-  // 🗡️ 오늘의 토벌 수련 관련 상태
+  // 🗡️ 토벌 수련 관련 상태 (무제한 다시하기 지원)
   const [subjugationStatus, setSubjugationStatus] = useState('idle')
-  const [hasDoneSubjugation, setHasDoneSubjugation] = useState(false)
   const [subjugationResult, setSubjugationResult] = useState(null)
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
 
-  // 🌿 제초 매크로 방지 관련 상태
+  // 🌿 제초 횟수 및 일일 제한(1,000pt) 관련 상태
+  const [weedingCount, setWeedingCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rakko_weeding_count')
+      return saved ? parseInt(saved, 10) : 0
+    } catch {
+      return 0
+    }
+  })
+  const [dailyWeedPoints, setDailyWeedPoints] = useState(() => {
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const savedDate = localStorage.getItem('rakko_weed_daily_date')
+      const savedPts = localStorage.getItem('rakko_weed_daily_pts')
+      if (savedDate === todayStr && savedPts) {
+        return parseInt(savedPts, 10)
+      }
+      return 0
+    } catch {
+      return 0
+    }
+  })
   const [weedingCooldown, setWeedingCooldown] = useState(0)
   const [weedingQuizModal, setWeedingQuizModal] = useState({
     isOpen: false,
@@ -184,14 +204,6 @@ export default function App() {
     if (savedFortuneDate === todayStr && savedFortuneData) {
       setHasDrawnFortune(true)
       try { setTodayFortune(JSON.parse(savedFortuneData)) } catch {}
-    }
-
-    const savedSubDate = localStorage.getItem('rakko_sub_date')
-    const savedSubData = localStorage.getItem('rakko_sub_data')
-    if (savedSubDate === todayStr && savedSubData) {
-      setHasDoneSubjugation(true)
-      setSubjugationStatus('finished')
-      try { setSubjugationResult(JSON.parse(savedSubData)) } catch {}
     }
 
     const syncUserProfile = async (currentSession) => {
@@ -268,6 +280,58 @@ export default function App() {
       return () => clearInterval(timer)
     }
   }, [weedingCooldown])
+
+  // 🌟 공통 포인트 업데이트 함수 (유저 프로필 + 팀 스코어 동시 업데이트로 프로필 카드 누적 포인트 문제 해결)
+  const updateUserAndTeamPoints = async (pointsToAdd) => {
+    if (!session) return
+    try {
+      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+      const userId = session.user.id
+
+      // 1. 유저 프로필 조회
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('team_id, points')
+        .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
+        .maybeSingle()
+
+      if (!profile) return
+
+      const targetTeam = profile.team_id
+      const currentProfPoints = profile.points || 0
+      const newProfPoints = currentProfPoints + pointsToAdd
+
+      // 2. user_profiles 테이블 points 업데이트 (프로필 카드 정상 노출)
+      await supabase
+        .from('user_profiles')
+        .update({ points: newProfPoints })
+        .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
+
+      // 3. team_scores 테이블 total_points 업데이트
+      if (targetTeam) {
+        const { data: teamData } = await supabase
+          .from('team_scores')
+          .select('total_points')
+          .eq('team_id', targetTeam)
+          .maybeSingle()
+
+        if (teamData) {
+          const newTeamPoints = (teamData.total_points || 0) + pointsToAdd
+          await supabase
+            .from('team_scores')
+            .update({ total_points: newTeamPoints })
+            .eq('team_id', targetTeam)
+        }
+      }
+
+      // 4. 로컬 UI 최신화
+      setUserPoints((prev) => prev + pointsToAdd)
+      fetchTeamScores()
+      fetchUserProfiles()
+    } catch (err) {
+      console.error('포인트 반영 중 오류 발생:', err)
+    }
+  }
 
   const fetchTeamScores = async () => {
     const { data, error } = await supabase
@@ -408,42 +472,13 @@ export default function App() {
     localStorage.setItem('rakko_fortune_date', todayStr)
     localStorage.setItem('rakko_fortune_data', JSON.stringify(randomFortune))
 
-    try {
-      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('team_id')
-        .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-        .maybeSingle()
-
-      if (profile && profile.team_id) {
-        const targetTeam = profile.team_id
-        const { data: teamData } = await supabase
-          .from('team_scores')
-          .select('total_points')
-          .eq('team_id', targetTeam)
-          .maybeSingle()
-
-        if (teamData) {
-          const newPoints = (teamData.total_points || 0) + randomFortune.points
-          await supabase.from('team_scores').update({ total_points: newPoints }).eq('team_id', targetTeam)
-          setUserPoints((prev) => prev + randomFortune.points)
-          fetchTeamScores()
-          fetchUserProfiles()
-        }
-      }
-    } catch (err) {
-      console.error('운세 포인트 반영 중 오류 발생:', err)
-    }
+    await updateUserAndTeamPoints(randomFortune.points)
   }
 
+  // 🗡️ 토벌 수련 시작
   const handleStartSubjugation = () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
-      return
-    }
-    if (hasDoneSubjugation) {
-      alert('오늘의 토벌 수련은 이미 완료하셨습니다! 내일 다시 도전해 주세요.')
       return
     }
 
@@ -458,6 +493,7 @@ export default function App() {
     setSubjugationTimer(timer)
   }
 
+  // 🗡️ 토벌 몬스터 클릭
   const handleMonsterClick = async () => {
     if (subjugationStatus === 'waiting') {
       clearTimeout(subjugationTimer)
@@ -480,44 +516,19 @@ export default function App() {
 
       setSubjugationResult(result)
       setSubjugationStatus('finished')
-      setHasDoneSubjugation(true)
 
-      const todayStr = new Date().toISOString().slice(0, 10)
-      localStorage.setItem('rakko_sub_date', todayStr)
-      localStorage.setItem('rakko_sub_data', JSON.stringify(result))
-
-      try {
-        const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('team_id')
-          .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-          .maybeSingle()
-
-        if (profile && profile.team_id) {
-          const targetTeam = profile.team_id
-          const { data: teamData } = await supabase
-            .from('team_scores')
-            .select('total_points')
-            .eq('team_id', targetTeam)
-            .maybeSingle()
-
-          if (teamData) {
-            const newPoints = (teamData.total_points || 0) + result.points
-            await supabase.from('team_scores').update({ total_points: newPoints }).eq('team_id', targetTeam)
-            setUserPoints((prev) => prev + result.points)
-            fetchTeamScores()
-            fetchUserProfiles()
-          }
-        }
-      } catch (err) {
-        console.error('토벌 점수 반영 중 오류 발생:', err)
-      }
+      await updateUserAndTeamPoints(result.points)
     }
   }
 
-  // 🌿 1. 제초 버튼 클릭 시 퀴즈 모달 오픈
-  const handleOpenWeedingQuiz = () => {
+  // 🗡️ 토벌 수련 다시 도전하기
+  const handleRetrySubjugation = () => {
+    setSubjugationStatus('idle')
+    setSubjugationResult(null)
+  }
+
+  // 🌿 1. 잡초 뽑기 클릭 핸들러 (하루 1,000pt 제한 + 1,000회당 1번 매크로 검수)
+  const handleWeedingClick = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
       return
@@ -527,18 +538,31 @@ export default function App() {
       return
     }
 
-    const n1 = Math.floor(Math.random() * 20) + 1
-    const n2 = Math.floor(Math.random() * 20) + 1
-    
-    setWeedingQuizModal({
-      isOpen: true,
-      num1: n1,
-      num2: n2,
-      userAnswer: ''
-    })
+    // 🛑 하루 1,000pt 한도 검사
+    if (dailyWeedPoints >= 1000) {
+      alert('⚠️ 오늘 획득 가능한 최대 제초 포인트(1,000 pt)를 모두 달성하셨습니다! 내일 다시 도전해 주세요.')
+      return
+    }
+
+    const nextCount = weedingCount + 1
+
+    // 🎯 1,000번째마다 산수 퀴즈 모달 팝업
+    if (nextCount > 0 && nextCount % 1000 === 0) {
+      const n1 = Math.floor(Math.random() * 20) + 1
+      const n2 = Math.floor(Math.random() * 20) + 1
+      
+      setWeedingQuizModal({
+        isOpen: true,
+        num1: n1,
+        num2: n2,
+        userAnswer: ''
+      })
+    } else {
+      await executeWeeding(nextCount)
+    }
   }
 
-  // 🌿 2. 퀴즈 검증 후 실제 제초 수련 진행
+  // 🌿 2. 매크로 퀴즈 제출 시 실행
   const handleVerifyAndWeed = async (e) => {
     e.preventDefault()
     const expected = weedingQuizModal.num1 + weedingQuizModal.num2
@@ -550,56 +574,29 @@ export default function App() {
     }
 
     setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '' })
-    setWeedingCooldown(3) // 3초 쿨타임 시작
-
-    await handleWeeding()
+    const nextCount = weedingCount + 1
+    await executeWeeding(nextCount)
   }
 
-  // 🌿 3. Supabase DB 제초 포인트 추가
-  const handleWeeding = async () => {
+  // 🌿 3. 제초 실제 포인트 적립 실행
+  const executeWeeding = async (nextCount) => {
+    setWeedingCooldown(3) // 3초 쿨타임 적용
+
+    const newDailyPts = dailyWeedPoints + 2
+    const todayStr = new Date().toISOString().slice(0, 10)
+
+    setDailyWeedPoints(newDailyPts)
+    setWeedingCount(nextCount)
+
     try {
-      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('team_id')
-        .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-        .maybeSingle()
-
-      if (!profile || !profile.team_id) {
-        alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.\n디스코드 서버에서 먼저 종족 역할을 부여받고 채팅을 남겨주세요!')
-        return
-      }
-
-      const targetTeam = profile.team_id
-
-      const { data: teamData } = await supabase
-        .from('team_scores')
-        .select('total_points')
-        .eq('team_id', targetTeam)
-        .maybeSingle()
-
-      if (!teamData) {
-        alert('해당 팀의 점수 데이터를 찾을 수 없습니다.')
-        return
-      }
-
-      const currentPoints = teamData.total_points || 0
-      const newPoints = currentPoints + 2
-
-      const { error: updateError } = await supabase
-        .from('team_scores')
-        .update({ total_points: newPoints })
-        .eq('team_id', targetTeam)
-
-      if (!updateError) {
-        setUserPoints((prev) => prev + 2)
-        fetchTeamScores()
-        fetchUserProfiles()
-      }
+      localStorage.setItem('rakko_weed_daily_date', todayStr)
+      localStorage.setItem('rakko_weed_daily_pts', newDailyPts.toString())
+      localStorage.setItem('rakko_weeding_count', nextCount.toString())
     } catch (err) {
-      console.error('제초 처리 중 오류 발생:', err)
+      console.error('로컬 스토리지 저장 실패:', err)
     }
+
+    await updateUserAndTeamPoints(2)
   }
 
   const fetchCommentsForPost = async (postId) => {
@@ -1150,7 +1147,7 @@ export default function App() {
                   <Target color="#dc2626" size={18} /> 🗡️ 오늘의 토벌 수련
                 </h2>
                 <p style={{ margin: 0, color: '#b91c1c', fontSize: '13px' }}>
-                  몬스터가 나타나면 가장 빠르게 클릭하세요!
+                  몬스터가 나타나면 가장 빠르게 클릭하세요! (무제한 다시 도전 가능)
                 </p>
               </div>
 
@@ -1158,19 +1155,18 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleStartSubjugation}
-                  disabled={hasDoneSubjugation}
                   style={{
-                    background: hasDoneSubjugation ? '#cbd5e1' : '#dc2626',
+                    background: '#dc2626',
                     color: '#fff',
                     border: 'none',
                     padding: '8px 12px',
                     borderRadius: '10px',
                     fontWeight: '700',
                     fontSize: '13px',
-                    cursor: hasDoneSubjugation ? 'default' : 'pointer'
+                    cursor: 'pointer'
                   }}
                 >
-                  {hasDoneSubjugation ? '완료' : '시작 🗡️'}
+                  시작 🗡️
                 </button>
               )}
             </div>
@@ -1213,18 +1209,41 @@ export default function App() {
             )}
 
             {subjugationStatus === 'finished' && subjugationResult && (
-              <div style={{ background: '#fff', padding: '10px 14px', borderRadius: '10px', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: '#fee2e2', color: '#991b1b' }}>
-                    {subjugationResult.grade}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-                    반응 속도: <b>{subjugationResult.reactionTime} ms</b>
+              <div style={{ background: '#fff', padding: '12px 14px', borderRadius: '10px', border: '1px solid #fca5a5', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: '#fee2e2', color: '#991b1b' }}>
+                      {subjugationResult.grade}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>
+                      반응 속도: <b>{subjugationResult.reactionTime} ms</b>
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#dc2626' }}>
+                    +{subjugationResult.points} pt
                   </span>
                 </div>
-                <span style={{ fontSize: '13px', fontWeight: '800', color: '#dc2626' }}>
-                  +{subjugationResult.points} pt
-                </span>
+
+                <button
+                  type="button"
+                  onClick={handleRetrySubjugation}
+                  style={{
+                    background: '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <RotateCcw size={14} /> 다시 도전하기 🗡️
+                </button>
               </div>
             )}
           </section>
@@ -1236,27 +1255,30 @@ export default function App() {
                   <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
                 </h2>
                 <p style={{ margin: 0, color: '#15803d', fontSize: '13px' }}>
-                  잡초를 뽑아 팀 포인트를 모으세요. (매크로 방지 검수 적용)
+                  잡초를 뽑아 팀 포인트를 모으세요. (하루 최대 1,000 pt 제한)
                 </p>
               </div>
               <button 
-                onClick={handleOpenWeedingQuiz} 
-                disabled={weedingCooldown > 0}
+                onClick={handleWeedingClick} 
+                disabled={weedingCooldown > 0 || dailyWeedPoints >= 1000}
                 className="btn-weed" 
                 style={{ 
                   padding: '8px 12px', 
                   fontSize: '13px',
-                  opacity: weedingCooldown > 0 ? 0.6 : 1,
-                  cursor: weedingCooldown > 0 ? 'not-allowed' : 'pointer'
+                  opacity: (weedingCooldown > 0 || dailyWeedPoints >= 1000) ? 0.6 : 1,
+                  cursor: (weedingCooldown > 0 || dailyWeedPoints >= 1000) ? 'not-allowed' : 'pointer'
                 }}
               >
-                <Flame size={16} /> {weedingCooldown > 0 ? `${weedingCooldown}초 대기...` : '잡초 뽑기 (+2 pt)'}
+                <Flame size={16} /> {dailyWeedPoints >= 1000 ? '오늘 한도 달성' : weedingCooldown > 0 ? `${weedingCooldown}초 대기...` : '잡초 뽑기 (+2 pt)'}
               </button>
             </div>
 
             {session && (
-              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '13px' }}>
-                현재 세션 누적 포인트: <b>{userPoints}</b> pt
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                <div>오늘 제초 획득 포인트: <b>{dailyWeedPoints.toLocaleString()}</b> / 1,000 pt</div>
+                <div style={{ fontSize: '12px', color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #86efac' }}>
+                  누적 제초: <b>{weedingCount.toLocaleString()}</b>회 (다음 검수: <b>{1000 - (weedingCount % 1000)}</b>회 남음)
+                </div>
               </div>
             )}
           </section>
@@ -1946,7 +1968,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🌿 [MODAL 2] 제초 매크로 방지 산수 퀴즈 모달 */}
+      {/* 🌿 [MODAL 2] 1,000회 주기 매크로 방지 산수 퀴즈 모달 */}
       {/* ========================================================= */}
       {weedingQuizModal.isOpen && (
         <div style={{
@@ -1970,10 +1992,10 @@ export default function App() {
             textAlign: 'center'
           }}>
             <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', color: '#166534' }}>
-              🌱 랏코 스승의 제초 검수
+              🌱 랏코 스승의 1,000회 제초 검수
             </h3>
             <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#475569' }}>
-              잡초를 뽑기 전에 아래 계산을 입력하세요!
+              1,000번째 제초 달성! 아래 계산을 입력하세요.
             </p>
 
             <form onSubmit={handleVerifyAndWeed}>
