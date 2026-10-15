@@ -129,13 +129,6 @@ export default function App() {
   const [myTeamInfo, setMyTeamInfo] = useState(null)
   const [teamDailyWeedUsed, setTeamDailyWeedUsed] = useState(0)
   const [weedingCooldown, setWeedingCooldown] = useState(false)
-  const [weedingQuizModal, setWeedingQuizModal] = useState({
-    isOpen: false,
-    num1: 0,
-    num2: 0,
-    userAnswer: '',
-    targetNextCount: 0
-  })
 
   // 🎴 제자 프로필 모달 상태
   const [selectedProfileModal, setSelectedProfileModal] = useState({
@@ -561,7 +554,7 @@ export default function App() {
     setSubjugationResult(null)
   }
 
-  // 🌿 1. 잡초 뽑기 클릭 핸들러 (종족(팀)당 하루 1,000회 제한 / 팀 전체 누적 1,000회 주기로 산수 퀴즈)
+  // 🌿 1. 잡초 뽑기 클릭 핸들러 (종족(팀)당 하루 1,000회 제한)
   const handleWeedingClick = async () => {
     if (!session) {
       alert('로그인이 필요한 수련입니다!')
@@ -583,11 +576,11 @@ export default function App() {
 
     const { data: teamData } = await supabase
       .from('team_scores')
-      .select('weed_count, daily_weed_count, daily_weed_date')
+      .select('daily_weed_count, daily_weed_date')
       .eq('team_id', profile.team_id)
       .maybeSingle()
 
-    // 오늘(KST) 우리 팀이 이미 1,000회를 채웠으면 퀴즈 전에 바로 안내 (최종 검사는 서버 함수가 다시 수행)
+    // 오늘(KST) 우리 팀이 이미 1,000회를 채웠으면 바로 안내 (최종 검사는 서버 함수가 다시 수행)
     const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const dbWeedDate = teamData?.daily_weed_date ? String(teamData.daily_weed_date).split('T')[0] : ''
     const teamUsedToday = dbWeedDate === kstToday ? (teamData?.daily_weed_count || 0) : 0
@@ -597,41 +590,10 @@ export default function App() {
       return
     }
 
-    const currentTeamWeedCount = teamData?.weed_count || 0
-    const nextTeamCount = currentTeamWeedCount + 1
-
-    if (nextTeamCount > 0 && nextTeamCount % 1000 === 0) {
-      const n1 = Math.floor(Math.random() * 20) + 1
-      const n2 = Math.floor(Math.random() * 20) + 1
-      
-      setWeedingQuizModal({
-        isOpen: true,
-        num1: n1,
-        num2: n2,
-        userAnswer: '',
-        targetNextCount: nextTeamCount
-      })
-    } else {
-      await executeWeeding()
-    }
-  }
-
-  // 🌿 2. 팀 1,000번째 매크로 퀴즈 제출 시 실행
-  const handleVerifyAndWeed = async (e) => {
-    e.preventDefault()
-    const expected = weedingQuizModal.num1 + weedingQuizModal.num2
-    
-    if (parseInt(weedingQuizModal.userAnswer.trim(), 10) !== expected) {
-      alert('⚠️ 오답입니다! 랏코 스승님의 검수를 통과하지 못했습니다.')
-      setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '', targetNextCount: 0 })
-      return
-    }
-
-    setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '', targetNextCount: 0 })
     await executeWeeding()
   }
 
-  // 🌿 3. 제초 포인트 및 팀 전체 횟수 1 증가 (0.2초 쿨타임)
+  // 🌿 2. 제초 포인트 및 팀 전체 횟수 1 증가 (0.2초 쿨타임)
   const executeWeeding = async () => {
     setWeedingCooldown(true)
     setTimeout(() => {
@@ -1302,7 +1264,7 @@ export default function App() {
                   <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
                 </h2>
                 <p style={{ margin: 0, color: '#15803d', fontSize: '13px' }}>
-                  잡초를 뽑아 팀 포인트를 모으세요. (종족당 하루 1,000회 / 팀 합산 1,000회당 스승님 검수 / 0.2초 쿨타임)
+                  잡초를 뽑아 팀 포인트를 모으세요. (종족당 하루 1,000회 / 0.2초 쿨타임)
                 </p>
               </div>
               <button 
@@ -1324,7 +1286,7 @@ export default function App() {
               <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #a7f3d0', color: '#166534', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                 <div>오늘 우리 종족 제초: <b>{teamDailyWeedUsed.toLocaleString()}</b> / 1,000회</div>
                 <div style={{ fontSize: '12px', color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #86efac' }}>
-                  팀 총 제초: <b>{currentTeamWeedCount.toLocaleString()}</b>회 (다음 검수: <b>{1000 - (currentTeamWeedCount % 1000)}</b>회 남음)
+                  팀 총 제초: <b>{currentTeamWeedCount.toLocaleString()}</b>회 (오늘 남은 횟수: <b>{Math.max(0, 1000 - teamDailyWeedUsed).toLocaleString()}</b>회)
                 </div>
               </div>
             )}
@@ -2010,107 +1972,6 @@ export default function App() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* 🌿 [MODAL 2] 팀 전체 누적 1,000회 주기 매크로 방지 산수 퀴즈 모달 */}
-      {/* ========================================================= */}
-      {weedingQuizModal.isOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '16px'
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: '320px',
-            backgroundColor: '#fff',
-            borderRadius: '16px',
-            padding: '20px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
-            textAlign: 'center'
-          }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', color: '#166534' }}>
-              🌱 랏코 스승의 팀 1,000회 제초 검수
-            </h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#475569' }}>
-              우리 팀의 {weedingQuizModal.targetNextCount.toLocaleString()}번째 제초 달성! 아래 계산을 입력하세요.
-            </p>
-
-            <form onSubmit={handleVerifyAndWeed}>
-              <div style={{
-                background: '#f0fdf4',
-                border: '2px dashed #86efac',
-                borderRadius: '12px',
-                padding: '12px',
-                fontSize: '20px',
-                fontWeight: '900',
-                color: '#15803d',
-                marginBottom: '14px'
-              }}>
-                {weedingQuizModal.num1} + {weedingQuizModal.num2} = ?
-              </div>
-
-              <input
-                type="number"
-                autoFocus
-                placeholder="정답 입력"
-                value={weedingQuizModal.userAnswer}
-                onChange={(e) => setWeedingQuizModal({ ...weedingQuizModal, userAnswer: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '15px',
-                  textAlign: 'center',
-                  boxSizing: 'border-box',
-                  marginBottom: '12px'
-                }}
-              />
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setWeedingQuizModal({ isOpen: false, num1: 0, num2: 0, userAnswer: '', targetNextCount: 0 })}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    color: '#64748b',
-                    fontWeight: '700',
-                    cursor: 'pointer'
-                  }}
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: '#16a34a',
-                    color: '#fff',
-                    fontWeight: '700',
-                    cursor: 'pointer'
-                  }}
-                >
-                  확인
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
