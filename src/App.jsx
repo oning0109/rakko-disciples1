@@ -4,8 +4,10 @@ import {
   Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, 
   Heart, User, Clock, Trash2, X, Users, Upload, MessageCircle, 
   Gift, LayoutDashboard, Target, Swords, Gamepad2, FileText, 
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight, RotateCcw
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight, RotateCcw,
+  Shield, ExternalLink, Download, CalendarPlus
 } from 'lucide-react'
+import AdminPanel from './AdminPanel'
 
 // 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 로컬 PNG)
 const RAKKO_MASTER_IMAGE = '/rakko.png'
@@ -107,9 +109,152 @@ const isScheduleForDate = (schedule, targetDateStr) => {
   return cleanEventDate === cleanTargetDate
 }
 
+
+// 🔗 디스코드 서버(길드) ID — 값을 넣으면 일정 카드에 "디스코드에서 보기" 버튼이 나타납니다.
+// (디스코드 개발자 모드 → 서버 아이콘 우클릭 → 서버 ID 복사)
+const DISCORD_GUILD_ID = '1529434801134637106'
+
+// 🕘 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
+const getKstToday = () => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+// 📱 모바일 화면 감지 (기본: 너비 640px 이하)
+const useIsMobile = (breakpoint = 640) => {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
+  )
+  // 🛡️ 관리자 여부 확인 (서버 함수 is_admin 이 판정)
+  useEffect(() => {
+    let cancelled = false
+    const checkAdmin = async () => {
+      if (!session) {
+        setIsAdmin(false)
+        return
+      }
+      const { data, error } = await supabase.rpc('is_admin')
+      if (!cancelled) setIsAdmin(!error && data === true)
+    }
+    checkAdmin()
+    return () => { cancelled = true }
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') setActiveTab('home')
+  }, [isAdmin, activeTab])
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`)
+    const onChange = (e) => setIsMobile(e.matches)
+    setIsMobile(mq.matches)
+    if (mq.addEventListener) mq.addEventListener('change', onChange)
+    else mq.addListener(onChange)
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', onChange)
+      else mq.removeListener(onChange)
+    }
+  }, [breakpoint])
+  return isMobile
+}
+
+// 🏷️ 일정 분류별 색상
+const CATEGORY_STYLE = {
+  '발로란트': { bg: '#ffe4e6', color: '#be123c' },
+  '오버워치': { bg: '#ffedd5', color: '#c2410c' },
+  '종합게임': { bg: '#dbeafe', color: '#1d4ed8' },
+  '술캠': { bg: '#ede9fe', color: '#6d28d9' },
+  '공구': { bg: '#dcfce7', color: '#15803d' },
+}
+const getCategoryStyle = (category) => CATEGORY_STYLE[category] || { bg: '#f1f5f9', color: '#475569' }
+
+// 📆 일정 날짜 → { y, mo, d, hh, mm } (시간이 없으면 hh/mm 는 null)
+const parseScheduleStart = (dateStr) => {
+  const m = String(dateStr || '').trim().match(/(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
+  if (!m) return null
+  return { y: +m[1], mo: +m[2], d: +m[3], hh: m[4] != null ? +m[4] : null, mm: m[5] != null ? +m[5] : null }
+}
+
+// ⏳ D-day 라벨 (오늘 / D-n / 종료)
+const getDDay = (dateStr) => {
+  const st = parseScheduleStart(dateStr)
+  if (!st) return null
+  const [ty, tm, td] = getKstToday().split('-').map(Number)
+  const diff = Math.round((Date.UTC(st.y, st.mo - 1, st.d) - Date.UTC(ty, tm - 1, td)) / 86400000)
+  if (diff === 0) return { label: '오늘', bg: '#fee2e2', color: '#b91c1c' }
+  if (diff > 0) return { label: `D-${diff}`, bg: '#dbeafe', color: '#1d4ed8' }
+  return { label: '종료', bg: '#f1f5f9', color: '#94a3b8' }
+}
+
+const pad2 = (n) => String(n).padStart(2, '0')
+// 시간 정보가 있으면 2시간짜리 일정으로, 없으면 종일 일정으로 만든다 (모두 한국 시간)
+const getCalendarRange = (dateStr) => {
+  const st = parseScheduleStart(dateStr)
+  if (!st) return null
+  const hasTime = st.hh != null && !(st.hh === 0 && st.mm === 0)
+  if (!hasTime) {
+    const next = new Date(Date.UTC(st.y, st.mo - 1, st.d + 1))
+    return {
+      allDay: true,
+      start: `${st.y}${pad2(st.mo)}${pad2(st.d)}`,
+      end: `${next.getUTCFullYear()}${pad2(next.getUTCMonth() + 1)}${pad2(next.getUTCDate())}`,
+    }
+  }
+  const startMs = Date.UTC(st.y, st.mo - 1, st.d, st.hh, st.mm)
+  const fmt = (ms) => {
+    const t = new Date(ms)
+    return `${t.getUTCFullYear()}${pad2(t.getUTCMonth() + 1)}${pad2(t.getUTCDate())}T${pad2(t.getUTCHours())}${pad2(t.getUTCMinutes())}00`
+  }
+  return { allDay: false, start: fmt(startMs), end: fmt(startMs + 2 * 3600 * 1000) }
+}
+
+// 📅 구글 캘린더에 추가하는 링크
+const buildGoogleCalendarUrl = (sch) => {
+  const range = getCalendarRange(sch.event_date)
+  if (!range) return null
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `[${sch.category || '내전'}] ${sch.title}`,
+    dates: `${range.start}/${range.end}`,
+    details: `랏코와 제자들 일정${sch.created_by_name ? ` (등록: ${sch.created_by_name})` : ''}`,
+  })
+  if (!range.allDay) params.set('ctz', 'Asia/Seoul')
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+// 💾 .ics 파일 다운로드 (아이폰 캘린더, 삼성 캘린더, 아웃룩 등)
+const downloadIcs = (sch) => {
+  const range = getCalendarRange(sch.event_date)
+  if (!range) return
+  const esc = (t) => String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//rakko-disciples//schedule//KO',
+    'BEGIN:VEVENT',
+    `UID:schedule-${sch.id}@rakko-disciples`,
+    `DTSTAMP:${stamp}`,
+    range.allDay ? `DTSTART;VALUE=DATE:${range.start}` : `DTSTART;TZID=Asia/Seoul:${range.start}`,
+    range.allDay ? `DTEND;VALUE=DATE:${range.end}` : `DTEND;TZID=Asia/Seoul:${range.end}`,
+    `SUMMARY:${esc(`[${sch.category || '내전'}] ${sch.title}`)}`,
+    `DESCRIPTION:${esc('랏코와 제자들 일정')}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ]
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${String(sch.title || 'schedule').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.ics`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [activeTab, setActiveTab] = useState('home')
+  const isMobile = useIsMobile()
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const [teams, setTeams] = useState([])
   const [allProfiles, setAllProfiles] = useState([])
@@ -169,7 +314,7 @@ export default function App() {
   // 📅 일정/달력 관련 상태
   const [schedules, setSchedules] = useState([])
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDateStr, setSelectedDateStr] = useState(new Date().toISOString().slice(0, 10))
+  const [selectedDateStr, setSelectedDateStr] = useState(getKstToday())
 
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -849,10 +994,123 @@ export default function App() {
 
   const currentTeamWeedCount = myTeamInfo?.weed_count || 0
 
+  // 🗂️ 선택한 날짜의 일정 카드 (D-day, 분류 색상, 디스코드 이동, 캘린더 추가)
+  const selectedSchedules = schedules.filter((s) => isScheduleForDate(s, selectedDateStr))
+  const kstTodayStr = getKstToday()
+
+  const renderScheduleCard = (sch) => {
+    const isBirthday = sch.category && sch.category.includes('생일')
+    const timeStr = !isBirthday ? getTimeStr(sch.event_date) : ''
+    const dday = !isBirthday ? getDDay(sch.event_date) : null
+    const catStyle = getCategoryStyle(sch.category)
+    const isPast = dday && dday.label === '종료'
+    const discordUrl = DISCORD_GUILD_ID && sch.discord_thread_id
+      ? `https://discord.com/channels/${DISCORD_GUILD_ID}/${sch.discord_thread_id}`
+      : null
+    const googleUrl = !isBirthday ? buildGoogleCalendarUrl(sch) : null
+
+    const actionBtn = {
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+      padding: isMobile ? '9px 10px' : '6px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
+      border: '1px solid #cbd5e1', background: '#fff', color: '#334155', cursor: 'pointer',
+      textDecoration: 'none', flex: isMobile ? '1 1 0' : '0 0 auto', whiteSpace: 'nowrap'
+    }
+
+    return (
+      <div
+        key={sch.id}
+        style={{
+          padding: '12px',
+          background: isBirthday ? '#fff5f5' : '#f8fafc',
+          borderRadius: '12px',
+          border: isBirthday ? '1px solid #fecdd3' : '1px solid #e2e8f0',
+          opacity: isPast ? 0.7 : 1
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          {isBirthday ? (
+            <img
+              src={sch.created_by_avatar || RAKKO_MASTER_IMAGE}
+              alt="생일자 프로필"
+              style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #f43f5e', objectFit: 'cover', flexShrink: 0 }}
+            />
+          ) : (
+            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: catStyle.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
+              🎮
+            </div>
+          )}
+
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a', wordBreak: 'break-word', lineHeight: 1.35 }}>
+              {isBirthday ? '🎂 ' : ''}{sch.title}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+              {isBirthday ? (
+                <span style={{ fontSize: '11px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: '#fce7f3', color: '#be185d' }}>생일</span>
+              ) : (
+                <span style={{ fontSize: '11px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: catStyle.bg, color: catStyle.color }}>
+                  {sch.category || '기타'}
+                </span>
+              )}
+              {timeStr && (
+                <span style={{ fontSize: '11px', fontWeight: '700', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  <Clock size={12} /> {timeStr}
+                </span>
+              )}
+              {dday && (
+                <span style={{ fontSize: '11px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: dday.bg, color: dday.color }}>
+                  {dday.label}
+                </span>
+              )}
+            </div>
+
+            {sch.created_by_name && (
+              <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#64748b' }}>
+                {sch.created_by_avatar && (
+                  <img src={sch.created_by_avatar} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%' }} />
+                )}
+                <span>등록: <b>{sch.created_by_name}</b></span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(discordUrl || googleUrl) && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
+            {discordUrl && (
+              <a href={discordUrl} target="_blank" rel="noopener noreferrer" style={{ ...actionBtn, background: '#5865f2', borderColor: '#5865f2', color: '#fff' }}>
+                <ExternalLink size={13} /> 디스코드에서 보기
+              </a>
+            )}
+            {googleUrl && (
+              <a href={googleUrl} target="_blank" rel="noopener noreferrer" style={actionBtn}>
+                <CalendarPlus size={13} /> 구글 캘린더
+              </a>
+            )}
+            {googleUrl && (
+              <button type="button" onClick={() => downloadIcs(sch)} style={actionBtn}>
+                <Download size={13} /> .ics 저장
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto', padding: '20px 16px' }}>
+    <div style={{ maxWidth: '840px', margin: '0 auto', padding: isMobile ? '12px 10px' : '20px 16px' }}>
+      {/* 📱 모바일 전역 보정: 카드 여백 축소, 입력창 자동 확대(iOS) 방지 */}
+      <style>{`
+        @media (max-width: 640px) {
+          .card { padding: 14px !important; }
+          input, select, textarea { font-size: 16px !important; }
+          button { touch-action: manipulation; }
+        }
+      `}</style>
       {/* 1. 상단 프로필 & 헤더 */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '14px' : '20px', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img 
             src={RAKKO_MASTER_IMAGE} 
@@ -867,8 +1125,8 @@ export default function App() {
             }} 
           />
           <div>
-            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>랏코와 제자들</h1>
-            <p style={{ margin: '2px 0 0 0', color: 'var(--text-muted)', fontSize: '13px' }}>디스코드 커뮤니티 대시보드</p>
+            <h1 style={{ margin: 0, fontSize: isMobile ? '17px' : '20px', fontWeight: '800' }}>랏코와 제자들</h1>
+            <p style={{ margin: '2px 0 0 0', color: 'var(--text-muted)', fontSize: isMobile ? '11px' : '13px' }}>디스코드 커뮤니티 대시보드</p>
           </div>
         </div>
 
@@ -882,7 +1140,7 @@ export default function App() {
               alt="avatar" 
               style={{ width: '28px', height: '28px', borderRadius: '50%' }}
             />
-            <span style={{ fontWeight: '600', fontSize: '13px' }}>{session.user.user_metadata?.full_name}</span>
+            <span style={{ fontWeight: '600', fontSize: '13px', maxWidth: isMobile ? '84px' : '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.user.user_metadata?.full_name}</span>
             <button 
               onClick={(e) => { e.stopPropagation(); handleLogout(); }} 
               style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', padding: 0 }}
@@ -898,19 +1156,19 @@ export default function App() {
       </header>
 
       {/* 2. 메인 네비게이션 탭 */}
-      <nav style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '4px' }}>
+      <nav style={{ display: 'flex', gap: '8px', marginBottom: isMobile ? '14px' : '20px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '4px' }}>
         <button
           type="button"
           onClick={() => setActiveTab('home')}
           style={{
             flex: '1 0 auto',
-            padding: '10px 12px',
+            padding: isMobile ? '9px 10px' : '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'home' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
             background: activeTab === 'home' ? '#eff6ff' : '#fff',
             color: activeTab === 'home' ? '#1d4ed8' : '#64748b',
             fontWeight: '700',
-            fontSize: '13px',
+            fontSize: isMobile ? '12px' : '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -927,13 +1185,13 @@ export default function App() {
           onClick={() => setActiveTab('training')}
           style={{
             flex: '1 0 auto',
-            padding: '10px 12px',
+            padding: isMobile ? '9px 10px' : '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'training' ? '2px solid #d97706' : '1px solid #e2e8f0',
             background: activeTab === 'training' ? '#fffbe3' : '#fff',
             color: activeTab === 'training' ? '#b45309' : '#64748b',
             fontWeight: '700',
-            fontSize: '13px',
+            fontSize: isMobile ? '12px' : '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -950,13 +1208,13 @@ export default function App() {
           onClick={() => setActiveTab('community')}
           style={{
             flex: '1 0 auto',
-            padding: '10px 12px',
+            padding: isMobile ? '9px 10px' : '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'community' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
             background: activeTab === 'community' ? '#eff6ff' : '#fff',
             color: activeTab === 'community' ? '#1d4ed8' : '#64748b',
             fontWeight: '700',
-            fontSize: '13px',
+            fontSize: isMobile ? '12px' : '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -973,13 +1231,13 @@ export default function App() {
           onClick={() => setActiveTab('calendar')}
           style={{
             flex: '1 0 auto',
-            padding: '10px 12px',
+            padding: isMobile ? '9px 10px' : '10px 12px',
             borderRadius: '12px',
             border: activeTab === 'calendar' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
             background: activeTab === 'calendar' ? '#f5f3ff' : '#fff',
             color: activeTab === 'calendar' ? '#6d28d9' : '#64748b',
             fontWeight: '700',
-            fontSize: '13px',
+            fontSize: isMobile ? '12px' : '13px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -990,6 +1248,31 @@ export default function App() {
         >
           <CalendarIcon size={16} /> 📅 일정 달력
         </button>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('admin')}
+            style={{
+              flex: '1 0 auto',
+              padding: isMobile ? '9px 10px' : '10px 12px',
+              borderRadius: '12px',
+              border: activeTab === 'admin' ? '2px solid #dc2626' : '1px solid #e2e8f0',
+              background: activeTab === 'admin' ? '#fef2f2' : '#fff',
+              color: activeTab === 'admin' ? '#b91c1c' : '#64748b',
+              fontWeight: '700',
+              fontSize: isMobile ? '12px' : '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Shield size={16} /> 관리자
+          </button>
+        )}
       </nav>
 
       {/* ========================================================= */}
@@ -997,7 +1280,7 @@ export default function App() {
       {/* ========================================================= */}
       {activeTab === 'home' && (
         <section className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
             <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Trophy color="#f59e0b" size={20} /> 종족별 팀 순위
             </h2>
@@ -1020,7 +1303,7 @@ export default function App() {
                     border: '1px solid #f1f5f9'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div className={`rank-badge ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
                         {index + 1}
@@ -1105,7 +1388,7 @@ export default function App() {
       {activeTab === 'training' && (
         <>
           <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div>
                 <h2 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Gift color="#d97706" size={18} /> 🔮 랏코 스승의 오늘의 운세
@@ -1219,7 +1502,7 @@ export default function App() {
 
             {subjugationStatus === 'finished' && subjugationResult && (
               <div style={{ background: '#fff', padding: '12px 14px', borderRadius: '10px', border: '1px solid #fca5a5', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '12px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px', background: '#fee2e2', color: '#991b1b' }}>
                       {subjugationResult.grade}
@@ -1258,7 +1541,7 @@ export default function App() {
           </section>
 
           <section className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div>
                 <h2 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Sparkles color="#16a34a" size={18} /> 🌱 오늘의 제초 수련
@@ -1426,7 +1709,7 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: session ? 'pointer' : 'not-allowed', color: '#475569', fontSize: '13px', background: '#fff', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                 <Upload size={14} color="#3b82f6" />
                 <span>사진 첨부</span>
@@ -1667,7 +1950,7 @@ export default function App() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
             {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-              <div key={`empty-${i}`} style={{ height: '70px', background: '#f8fafc', borderRadius: '8px' }} />
+              <div key={`empty-${i}`} style={{ height: isMobile ? '48px' : '70px', background: '#f8fafc', borderRadius: '8px' }} />
             ))}
 
             {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -1682,10 +1965,10 @@ export default function App() {
                   key={dateStr}
                   onClick={() => setSelectedDateStr(dateStr)}
                   style={{
-                    height: '70px',
+                    height: isMobile ? '48px' : '70px',
                     padding: '4px',
                     borderRadius: '8px',
-                    border: isSelected ? '2px solid #8b5cf6' : '1px solid #f1f5f9',
+                    border: isSelected ? '2px solid #8b5cf6' : dateStr === kstTodayStr ? '1px solid #a78bfa' : '1px solid #f1f5f9',
                     background: isSelected ? '#f5f3ff' : '#fff',
                     cursor: 'pointer',
                     display: 'flex',
@@ -1697,6 +1980,19 @@ export default function App() {
                     {dayNum}
                   </span>
 
+                  {isMobile ? (
+                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '4px', alignItems: 'center' }}>
+                      {daySchedules.slice(0, 3).map((sch) => (
+                        <span
+                          key={sch.id}
+                          style={{ width: '7px', height: '7px', borderRadius: '50%', background: sch.category === '생일' ? '#ec4899' : '#0ea5e9' }}
+                        />
+                      ))}
+                      {daySchedules.length > 3 && (
+                        <span style={{ fontSize: '9px', fontWeight: '800', color: '#64748b' }}>+{daySchedules.length - 3}</span>
+                      )}
+                    </div>
+                  ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', overflowY: 'auto' }}>
                     {daySchedules.map((sch) => {
                       const isBirthday = sch.category === '생일'
@@ -1729,6 +2025,7 @@ export default function App() {
                       )
                     })}
                   </div>
+                  )}
                 </div>
               )
             })}
@@ -1736,71 +2033,35 @@ export default function App() {
 
           <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px dashed #e2e8f0' }}>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '800', color: '#334155' }}>
-              📌 {selectedDateStr} 일정 상세
+              📌 {selectedDateStr} 일정 상세 {selectedSchedules.length > 0 && <span style={{ color: '#8b5cf6' }}>({selectedSchedules.length})</span>}
             </h3>
 
-            {schedules.filter((s) => isScheduleForDate(s, selectedDateStr)).length === 0 ? (
+            {selectedSchedules.length === 0 ? (
               <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>등록된 일정이 없습니다.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {schedules.filter((s) => isScheduleForDate(s, selectedDateStr)).map((sch) => {
-                  const isBirthday = sch.category === '생일'
-                  const timeStr = !isBirthday ? getTimeStr(sch.event_date) : ''
-
-                  return (
-                    <div
-                      key={sch.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        background: isBirthday ? '#fff5f5' : '#f8fafc',
-                        borderRadius: '10px',
-                        border: isBirthday ? '1px solid #fecdd3' : '1px solid #e2e8f0'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {isBirthday ? (
-                          <img
-                            src={sch.created_by_avatar || RAKKO_MASTER_IMAGE}
-                            alt="생일자 프로필"
-                            style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid #f43f5e', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px' }}>
-                            🎮
-                          </div>
-                        )}
-
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>
-                            {sch.title}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', display: 'flex', gap: '8px' }}>
-                            <span>분류: <b>{sch.category}</b></span>
-                            {timeStr && (
-                              <span>시간: <b>{timeStr}</b></span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', padding: '4px 8px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
-                        {sch.created_by_avatar && (
-                          <img src={sch.created_by_avatar} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
-                        )}
-                        <span style={{ fontSize: '11px', fontWeight: '600', color: '#475569' }}>
-                          등록: {sch.created_by_name}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })}
+                {selectedSchedules.map((sch) => renderScheduleCard(sch))}
               </div>
             )}
           </div>
         </section>
+      )}
+
+      {/* ========================================================= */}
+      {/* 🛡️ [PAGE 5] 관리자 페이지 (관리자만 보임 / 권한은 DB 함수가 다시 검사) */}
+      {/* ========================================================= */}
+      {activeTab === 'admin' && isAdmin && (
+        <AdminPanel
+          supabase={supabase}
+          teamConfig={TEAM_CONFIG}
+          isMobile={isMobile}
+          onDataChanged={() => {
+            fetchSchedules()
+            fetchTeamScores()
+            fetchUserProfiles()
+            fetchPosts()
+          }}
+        />
       )}
 
       {/* ========================================================= */}
