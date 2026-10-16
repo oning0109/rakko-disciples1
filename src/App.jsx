@@ -112,7 +112,7 @@ const isScheduleForDate = (schedule, targetDateStr) => {
 
 // 🔗 디스코드 서버(길드) ID — 값을 넣으면 일정 카드에 "디스코드에서 보기" 버튼이 나타납니다.
 // (디스코드 개발자 모드 → 서버 아이콘 우클릭 → 서버 ID 복사)
-const DISCORD_GUILD_ID = ''
+const DISCORD_GUILD_ID = '1529434801134637106'
 
 // 🕘 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
 const getKstToday = () => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -122,25 +122,6 @@ const useIsMobile = (breakpoint = 640) => {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
   )
-  // 🛡️ 관리자 여부 확인 (서버 함수 is_admin 이 판정)
-  useEffect(() => {
-    let cancelled = false
-    const checkAdmin = async () => {
-      if (!session) {
-        setIsAdmin(false)
-        return
-      }
-      const { data, error } = await supabase.rpc('is_admin')
-      if (!cancelled) setIsAdmin(!error && data === true)
-    }
-    checkAdmin()
-    return () => { cancelled = true }
-  }, [session?.user?.id])
-
-  useEffect(() => {
-    if (!isAdmin && activeTab === 'admin') setActiveTab('home')
-  }, [isAdmin, activeTab])
-
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${breakpoint}px)`)
     const onChange = (e) => setIsMobile(e.matches)
@@ -315,6 +296,25 @@ export default function App() {
   const [schedules, setSchedules] = useState([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDateStr, setSelectedDateStr] = useState(getKstToday())
+
+  // 🛡️ 관리자 여부 확인 (서버 함수 is_admin 이 판정)
+  useEffect(() => {
+    let cancelled = false
+    const checkAdmin = async () => {
+      if (!session) {
+        setIsAdmin(false)
+        return
+      }
+      const { data, error } = await supabase.rpc('is_admin')
+      if (!cancelled) setIsAdmin(!error && data === true)
+    }
+    checkAdmin()
+    return () => { cancelled = true }
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') setActiveTab('home')
+  }, [isAdmin, activeTab])
 
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
