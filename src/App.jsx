@@ -112,7 +112,7 @@ const isScheduleForDate = (schedule, targetDateStr) => {
 
 // 🔗 디스코드 서버(길드) ID — 값을 넣으면 일정 카드에 "디스코드에서 보기" 버튼이 나타납니다.
 // (디스코드 개발자 모드 → 서버 아이콘 우클릭 → 서버 ID 복사)
-const DISCORD_GUILD_ID = '1529434801134637106'
+const DISCORD_GUILD_ID = ''
 
 // 🕘 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
 const getKstToday = () => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
