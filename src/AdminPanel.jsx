@@ -7,6 +7,27 @@ import { Shield, Trash2, Pencil, Save, X, RefreshCw, Search } from 'lucide-react
 
 const SCHEDULE_CATEGORIES = ['발로란트', '오버워치', '종합게임', '술캠', '공구', '기타']
 
+// 🎖️ 발로란트/롤 티어 → MMR 기준표 (오버워치는 숫자를 직접 입력)
+const RANK_TIERS = [
+  ['아이언', 100], ['브론즈', 200], ['실버', 300], ['골드', 400],
+  ['플래티넘', 500], ['에메랄드', 550], ['다이아몬드', 600], ['초월자', 650],
+  ['마스터', 700], ['그랜드마스터', 800], ['챌린저', 900], ['레디언트', 1000],
+]
+const KEEP_CURRENT = '__keep__'
+
+// 🎂 생일(MM-DD) 헬퍼 — DB 에는 'MM-DD' 형식으로 저장 (예전 'MM/DD' 값도 읽을 수 있게 처리)
+const parseBirthday = (b) => {
+  const m = String(b || '').match(/(\d{1,2})[-/.](\d{1,2})/)
+  return m ? { m: String(Number(m[1])), d: String(Number(m[2])) } : { m: '', d: '' }
+}
+const formatBirthday = (m, d) => `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+const daysInMonth = (m) => new Date(2000, Number(m), 0).getDate() // 2000년은 윤년 → 2월 29일 허용
+const tierLabel = (mmr) => {
+  if (mmr === null || mmr === undefined) return '미설정'
+  const hit = RANK_TIERS.find(([, v]) => v === mmr)
+  return hit ? `${hit[0]}` : `${mmr}`
+}
+
 const SUB_TABS = [
   { id: 'schedules', label: '📅 일정' },
   { id: 'users', label: '👤 제자' },
@@ -222,7 +243,7 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     setLoading(true)
     const { data } = await supabase
       .from('user_profiles')
-      .select('user_id, username, avatar_url, team_id, points, val_mmr, lol_mmr, tank_mmr, deal_mmr, heal_mmr')
+      .select('user_id, username, avatar_url, team_id, points, val_mmr, lol_mmr, tank_mmr, deal_mmr, heal_mmr, birthday')
       .order('username', { ascending: true })
     setRows(data || [])
     setLoading(false)
@@ -232,7 +253,9 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
 
   const startEdit = (r) => {
     setEditId(r.user_id)
+    const bd = parseBirthday(r.birthday)
     setForm({
+      bday_m: bd.m, bday_d: bd.d,
       points: r.points ?? 0, team_id: r.team_id || '',
       val_mmr: r.val_mmr ?? '', lol_mmr: r.lol_mmr ?? '',
       tank_mmr: r.tank_mmr ?? '', deal_mmr: r.deal_mmr ?? '', heal_mmr: r.heal_mmr ?? '',
@@ -248,6 +271,15 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
       const v = numOrUndefined(form[k])
       if (v !== undefined && v !== orig[k]) args[p] = v
     })
+    // 🎂 생일: 월/일을 모두 고르면 저장, 둘 다 비우면 삭제 ('' 전달 = 삭제, 미전달 = 변경 없음)
+    if (form.bday_m && !form.bday_d) { alert('생일의 일(日)도 선택해주세요.'); return }
+    const newB = form.bday_m && form.bday_d ? formatBirthday(form.bday_m, form.bday_d) : ''
+    const ob = parseBirthday(orig.birthday)
+    const origB = ob.m && ob.d ? formatBirthday(ob.m, ob.d) : ''
+    if (newB !== origB) {
+      if (newB === '' && !window.confirm(`${orig.username} 님의 생일(${origB})을 삭제할까요?`)) return
+      args.p_birthday = newB
+    }
     if (Object.keys(args).length === 1) { setEditId(null); return }
     const res = await callRpc('admin_update_user', args, `${orig.username} 정보를 수정했습니다.`)
     if (res.ok) { setEditId(null); load() }
@@ -261,6 +293,29 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
       <input style={input} type={type} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
     </label>
   )
+
+  // 발로란트/롤: 티어 드롭다운 (선택한 티어의 MMR 값으로 저장). 기준표에 없는 기존 값은 '현재 값 유지'로 보존
+  const tierField = (label, key, orig) => {
+    const current = numOrUndefined(form[key])
+    const matched = RANK_TIERS.find(([, v]) => v === current)
+    const origValue = orig[key]
+    const origIsTier = RANK_TIERS.some(([, v]) => v === origValue)
+    return (
+      <label style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#64748b', fontWeight: '700', flex: '1 1 140px' }}>
+        {label}
+        <select
+          style={input}
+          value={matched ? String(current) : KEEP_CURRENT}
+          onChange={(e) => setForm({ ...form, [key]: e.target.value === KEEP_CURRENT ? (origValue ?? '') : e.target.value })}
+        >
+          {!origIsTier && <option value={KEEP_CURRENT}>현재 값 유지 ({origValue ?? '미설정'})</option>}
+          {RANK_TIERS.map(([name, v]) => (
+            <option key={name} value={String(v)}>{name} ({v})</option>
+          ))}
+        </select>
+      </label>
+    )
+  }
 
   return (
     <div>
@@ -280,6 +335,8 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
                     <div style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.username}</div>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>
                       {teamConfig[r.team_id]?.name || '소속 없음'} · {(r.points ?? 0).toLocaleString()}pt
+                      {' · '}발 {tierLabel(r.val_mmr)} · 롤 {tierLabel(r.lol_mmr)}
+                      {(() => { const b = parseBirthday(r.birthday); return b.m && b.d ? ` · 🎂 ${formatBirthday(b.m, b.d)}` : '' })()}
                     </div>
                   </div>
                 </div>
@@ -300,9 +357,38 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
                       </select>
                     </label>
                   </div>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#64748b', fontWeight: '700' }}>
+                    🎂 생일 (월/일 — 둘 다 비우면 삭제)
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <select
+                        style={{ ...input, flex: 1 }}
+                        value={form.bday_m}
+                        onChange={(e) => {
+                          const m = e.target.value
+                          setForm({
+                            ...form,
+                            bday_m: m,
+                            bday_d: !m ? '' : (form.bday_d && Number(form.bday_d) > daysInMonth(m) ? '' : form.bday_d),
+                          })
+                        }}
+                      >
+                        <option value="">월 선택 (없음)</option>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={String(m)}>{m}월</option>)}
+                      </select>
+                      <select
+                        style={{ ...input, flex: 1 }}
+                        value={form.bday_d}
+                        disabled={!form.bday_m}
+                        onChange={(e) => setForm({ ...form, bday_d: e.target.value })}
+                      >
+                        <option value="">일 선택</option>
+                        {Array.from({ length: form.bday_m ? daysInMonth(form.bday_m) : 31 }, (_, i) => i + 1).map((d) => <option key={d} value={String(d)}>{d}일</option>)}
+                      </select>
+                    </div>
+                  </label>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {field('발로 MMR', 'val_mmr')}
-                    {field('롤 MMR', 'lol_mmr')}
+                    {tierField('발로란트 티어', 'val_mmr', r)}
+                    {tierField('롤 티어', 'lol_mmr', r)}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {field('옵치 탱', 'tank_mmr')}
