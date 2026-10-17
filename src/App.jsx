@@ -65,7 +65,7 @@ const getHighestOwMMR = (profile) => {
 const getMMDD = (dateStr) => {
   if (!dateStr) return ''
   const clean = String(dateStr).split('T')[0].split(' ')[0].trim()
-  const parts = clean.split('-')
+  const parts = clean.split(/[-/.]/)  // 'MM-DD', 'MM/DD', 'MM.DD' 모두 허용
   if (parts.length >= 2) {
     const m = parts[parts.length - 2].padStart(2, '0')
     const d = parts[parts.length - 1].padStart(2, '0')
