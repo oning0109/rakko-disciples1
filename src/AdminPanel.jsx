@@ -1,13 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, Trash2, Pencil, Save, X, RefreshCw, Search } from 'lucide-react'
+import { Shield, Trash2, Pencil, Save, X, RefreshCw, Search, Swords } from 'lucide-react'
 
 // 🛡️ 관리자 페이지
-// - 화면에서는 관리자 탭을 숨기지만, 실제 권한 검사는 DB 함수(admin_*)가 서버에서 다시 수행합니다.
-// - 모든 변경은 admin_logs 에 기록됩니다.
-
 const SCHEDULE_CATEGORIES = ['발로란트', '오버워치', '종합게임', '술캠', '공구', '기타']
 
-// 🎖️ 발로란트/롤 티어 → MMR 기준표 (오버워치는 숫자를 직접 입력)
 const RANK_TIERS = [
   ['아이언', 100], ['브론즈', 200], ['실버', 300], ['골드', 400],
   ['플래티넘', 500], ['에메랄드', 550], ['다이아몬드', 600], ['초월자', 650],
@@ -15,13 +11,12 @@ const RANK_TIERS = [
 ]
 const KEEP_CURRENT = '__keep__'
 
-// 🎂 생일(MM-DD) 헬퍼 — DB 에는 'MM-DD' 형식으로 저장 (예전 'MM/DD' 값도 읽을 수 있게 처리)
 const parseBirthday = (b) => {
   const m = String(b || '').match(/(\d{1,2})[-/.](\d{1,2})/)
   return m ? { m: String(Number(m[1])), d: String(Number(m[2])) } : { m: '', d: '' }
 }
 const formatBirthday = (m, d) => `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-const daysInMonth = (m) => new Date(2000, Number(m), 0).getDate() // 2000년은 윤년 → 2월 29일 허용
+const daysInMonth = (m) => new Date(2000, Number(m), 0).getDate()
 const tierLabel = (mmr) => {
   if (mmr === null || mmr === undefined) return '미설정'
   const hit = RANK_TIERS.find(([, v]) => v === mmr)
@@ -32,6 +27,7 @@ const SUB_TABS = [
   { id: 'schedules', label: '📅 일정' },
   { id: 'users', label: '👤 제자' },
   { id: 'teams', label: '🏰 종족' },
+  { id: 'raid', label: '🐉 레이드' },
   { id: 'posts', label: '📝 게시글' },
   { id: 'logs', label: '📜 기록' },
 ]
@@ -69,7 +65,6 @@ export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChang
     setTimeout(() => setNotice(''), 3500)
   }
 
-  // 공통 RPC 호출: 실패하면 메시지를 보여주고 false, 성공하면 true 반환
   const callRpc = async (fn, args, okMsg) => {
     setBusy(true)
     try {
@@ -117,9 +112,70 @@ export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChang
       {tab === 'schedules' && <SchedulesTab supabase={supabase} callRpc={callRpc} busy={busy} isMobile={isMobile} />}
       {tab === 'users' && <UsersTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} isMobile={isMobile} />}
       {tab === 'teams' && <TeamsTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} />}
+      {tab === 'raid' && <RaidTab supabase={supabase} callRpc={callRpc} busy={busy} />}
       {tab === 'posts' && <PostsTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} />}
       {tab === 'logs' && <LogsTab supabase={supabase} />}
     </section>
+  )
+}
+
+// ---------------------------------------------------------------
+// 🐉 레이드 보스 관리
+// ---------------------------------------------------------------
+function RaidTab({ supabase, callRpc, busy }) {
+  const [bossState, setBossState] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const loadBossState = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase.rpc('raid_get_state')
+    setBossState(data)
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => { loadBossState() }, [loadBossState])
+
+  const handleResetBoss = async () => {
+    if (!window.confirm('오늘의 보스와 누적 데미지 기록을 초기화하고 새 보스를 생성할까요?')) return
+    const res = await callRpc('admin_reset_raid_boss', {}, '오늘의 보스를 성공적으로 초기화했습니다!')
+    if (res.ok) loadBossState()
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={card}>
+        <h3 style={{ margin: '0 0 8px', fontSize: '15px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Swords size={16} color="#7c3aed" /> 오늘 진행 중인 보스 정보
+        </h3>
+        {loading ? (
+          <p style={{ fontSize: '13px', color: '#94a3b8' }}>불러오는 중...</p>
+        ) : bossState ? (
+          <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>
+            <div>보스 이름: <b>{bossState.boss?.emoji} {bossState.boss?.name}</b></div>
+            <div>현재 체력: <b>{bossState.hp?.toLocaleString()} / {bossState.max_hp?.toLocaleString()}</b></div>
+            <div>상태: <b style={{ color: bossState.status === 'defeated' ? '#16a34a' : '#dc2626' }}>
+              {bossState.status === 'defeated' ? '🏆 토벌 완료' : '🔥 전투 중'}
+            </b></div>
+          </div>
+        ) : (
+          <p style={{ fontSize: '13px', color: '#94a3b8' }}>보스 정보를 불러오지 못했습니다.</p>
+        )}
+
+        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #e2e8f0' }}>
+          <button
+            type="button"
+            onClick={handleResetBoss}
+            disabled={busy}
+            style={btn('#dc2626')}
+          >
+            <RefreshCw size={13} /> 오늘 보스 강제 초기화 / 새 보스 생성
+          </button>
+          <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>
+            ※ 초기화 시 오늘의 보스가 리셋되며, 랜덤으로 새 보스가 등장합니다.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -265,13 +321,12 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
   const save = async (orig) => {
     const args = { p_user_id: orig.user_id }
     const pts = numOrUndefined(form.points); if (pts !== undefined && pts !== (orig.points ?? 0)) args.p_points = pts
-    if ((form.team_id || '') !== (orig.team_id || '')) args.p_team_id = form.team_id // '' = 종족 없음
+    if ((form.team_id || '') !== (orig.team_id || '')) args.p_team_id = form.team_id
     const map = { val_mmr: 'p_val_mmr', lol_mmr: 'p_lol_mmr', tank_mmr: 'p_tank_mmr', deal_mmr: 'p_deal_mmr', heal_mmr: 'p_heal_mmr' }
     Object.entries(map).forEach(([k, p]) => {
       const v = numOrUndefined(form[k])
       if (v !== undefined && v !== orig[k]) args[p] = v
     })
-    // 🎂 생일: 월/일을 모두 고르면 저장, 둘 다 비우면 삭제 ('' 전달 = 삭제, 미전달 = 변경 없음)
     if (form.bday_m && !form.bday_d) { alert('생일의 일(日)도 선택해주세요.'); return }
     const newB = form.bday_m && form.bday_d ? formatBirthday(form.bday_m, form.bday_d) : ''
     const ob = parseBirthday(orig.birthday)
@@ -294,7 +349,6 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     </label>
   )
 
-  // 발로란트/롤: 티어 드롭다운 (선택한 티어의 MMR 값으로 저장). 기준표에 없는 기존 값은 '현재 값 유지'로 보존
   const tierField = (label, key, orig) => {
     const current = numOrUndefined(form[key])
     const matched = RANK_TIERS.find(([, v]) => v === current)
