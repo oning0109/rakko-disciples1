@@ -150,8 +150,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     s.flash = 1
   }, [])
 
-  // ---------------- 실시간 구독 ----------------
- // ---------------- 실시간 구독 ----------------
+// ---------------- 실시간 구독 ----------------
   useEffect(() => {
     if (!session) return undefined
     const channel = supabase
@@ -190,6 +189,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [session, supabase, spawnHit, spawnDefeat, refreshSoon, loadState])
+  
   // ---------------- 캔버스 루프 ----------------
   useEffect(() => {
     const canvas = canvasRef.current
