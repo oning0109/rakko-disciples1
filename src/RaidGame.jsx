@@ -187,7 +187,8 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       })
       .subscribe()
 
-    const interval = setInterval(loadState, 30000)
+    // 실시간(Realtime)이 기본이고, 연결이 끊겨도 60초마다 보정. 화면이 숨겨져 있으면(다른 탭/앱) 요청하지 않아 로그를 아낀다.
+    const interval = setInterval(() => { if (!document.hidden) loadState() }, 60000)
     return () => {
       clearInterval(interval)
       window.removeEventListener('focus', onFocus)
