@@ -36,9 +36,9 @@ const reasonText = (res) => {
 // 🔊 효과음 재생 함수 (public/sounds/ 경로의 MP3 재생)
 const playSfx = (type) => {
   const sfxMap = {
-    hit: '/sounds/hit.mp3',
-    crit: '/sounds/crit.mp3',
-    defeat: '/sounds/defeat.mp3',
+    hit: '/sounds/hit.wav',
+    crit: '/sounds/crit.wav',
+    defeat: '/sounds/defeat.wav',
   }
   const url = sfxMap[type]
   if (!url) return
