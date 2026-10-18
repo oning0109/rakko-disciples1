@@ -33,6 +33,21 @@ const reasonText = (res) => {
   }
 }
 
+// 🔊 효과음 재생 함수 (public/sounds/ 경로의 MP3 재생)
+const playSfx = (type) => {
+  const sfxMap = {
+    hit: '/sounds/hit.wav',
+    crit: '/sounds/crit.wav',
+    defeat: '/sounds/defeat.wav',
+  }
+  const url = sfxMap[type]
+  if (!url) return
+
+  const audio = new Audio(url)
+  audio.volume = 0.5 // 음량 조절 (0.0 ~ 1.0)
+  audio.play().catch(() => {}) // 재생 예외 무시
+}
+
 export default function RaidGame({ supabase, session, teamConfig = {}, isMobile, onChanged }) {
   const [state, setState] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -88,6 +103,9 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
 
   // ---------------- 연출 ----------------
   const spawnHit = useCallback((damage, crit, mine) => {
+    // 🔊 효과음 재생
+    playSfx(crit ? 'crit' : 'hit')
+
     const s = sceneRef.current
     const cx = s.w / 2
     const cy = s.h * 0.5
@@ -114,6 +132,9 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
   }, [])
 
   const spawnDefeat = useCallback(() => {
+    // 🔊 효과음 재생
+    playSfx('defeat')
+
     const s = sceneRef.current
     s.defeated = true
     s.defeatT = 0
