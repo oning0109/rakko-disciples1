@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabaseClient'
 import { 
   Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, 
@@ -214,6 +214,7 @@ export default function App() {
 
   // ⚔️ 오늘 자 종족별 레이드 점수/참여 인원 상태
   const [todayRaidStats, setTodayRaidStats] = useState({})
+  const rankingRefreshTimer = useRef(null)
 
   const [todayFortune, setTodayFortune] = useState(null)
   const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
@@ -306,10 +307,12 @@ export default function App() {
         const existingProfile = profiles && profiles.length > 0 ? profiles[0] : null
 
         if (existingProfile) {
-          await supabase.from('user_profiles').update({
-            username: username,
-            avatar_url: avatarUrl
-          }).or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
+          if (existingProfile.username !== username || (existingProfile.avatar_url || '') !== avatarUrl) {
+            await supabase.from('user_profiles').update({
+              username: username,
+              avatar_url: avatarUrl
+            }).or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
+          }
 
           setUserPoints(existingProfile.points || 0)
 
@@ -408,8 +411,16 @@ export default function App() {
       setUserPoints(result.user_points)
       setTeamDailyWeedUsed(result.used)
       setMyTeamInfo((prev) => prev ? { ...prev, total_points: result.team_points, weed_count: result.team_weed_count } : prev)
-      fetchTeamScores()
-      fetchUserProfiles()
+      // 요청(로그) 수를 줄이기 위해 매 제초마다 목록을 다시 불러오지 않고, 화면 값만 바로 갱신한 뒤 순위는 20초에 한 번만 새로고침
+      setTeams((prev) => prev.map((t) => (t.team_id === result.team ? { ...t, total_points: result.team_points, weed_count: result.team_weed_count } : t)))
+      setAllProfiles((prev) => prev.map((pr) => (pr.user_id === session.user.id ? { ...pr, points: result.user_points } : pr)))
+      if (!rankingRefreshTimer.current) {
+        rankingRefreshTimer.current = setTimeout(() => {
+          rankingRefreshTimer.current = null
+          fetchTeamScores()
+          fetchUserProfiles()
+        }, 20000)
+      }
     } catch (err) {}
   }
 
@@ -629,33 +640,7 @@ export default function App() {
     if (!session) { alert('로그인이 필요한 수련입니다!'); return }
     if (weedingCooldown) return
 
-    const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('team_id')
-      .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-      .maybeSingle()
-
-    if (!profile || !profile.team_id) {
-      alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.')
-      return
-    }
-
-    const { data: teamData } = await supabase
-      .from('team_scores')
-      .select('daily_weed_count, daily_weed_date')
-      .eq('team_id', profile.team_id)
-      .maybeSingle()
-
-    const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const dbWeedDate = teamData?.daily_weed_date ? String(teamData.daily_weed_date).split('T')[0] : ''
-    const teamUsedToday = dbWeedDate === kstToday ? (teamData?.daily_weed_count || 0) : 0
-    setTeamDailyWeedUsed(teamUsedToday)
-    if (teamUsedToday >= 1000) {
-      alert('⚠️ 오늘 우리 종족의 제초 한도(1,000회)를 모두 채웠습니다! 내일 다시 도전해 주세요.')
-      return
-    }
-
+    // 팀 소속/하루 한도 검사는 서버 함수(try_team_weed)가 하므로 클릭마다 미리 조회하지 않는다 (API 요청·로그 절감)
     await executeWeeding()
   }
 
