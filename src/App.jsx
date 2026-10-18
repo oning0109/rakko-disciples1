@@ -8,6 +8,7 @@ import {
   Shield, ExternalLink, Download, CalendarPlus
 } from 'lucide-react'
 import AdminPanel from './AdminPanel'
+import RaidGame from './RaidGame'
 
 // 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 로컬 PNG)
 const RAKKO_MASTER_IMAGE = '/rakko.png'
@@ -1387,6 +1388,27 @@ export default function App() {
       {/* ========================================================= */}
       {activeTab === 'training' && (
         <>
+          {/* 🐉 종족 합동 보스 레이드 (서버가 데미지/보상을 계산, 실시간 연동) */}
+          <RaidGame
+            supabase={supabase}
+            session={session}
+            teamConfig={TEAM_CONFIG}
+            isMobile={isMobile}
+            onChanged={async () => {
+              fetchTeamScores()
+              fetchUserProfiles()
+              if (session) {
+                const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+                const { data } = await supabase
+                  .from('user_profiles')
+                  .select('points')
+                  .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
+                  .maybeSingle()
+                if (data) setUserPoints(data.points || 0)
+              }
+            }}
+          />
+
           <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div>
