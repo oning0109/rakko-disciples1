@@ -10,10 +10,8 @@ import {
 import AdminPanel from './AdminPanel'
 import RaidGame from './RaidGame'
 
-// 상단 헤더 및 랏코 대표 이미지 (public/ 폴더 로컬 PNG)
 const RAKKO_MASTER_IMAGE = '/rakko.png'
 
-// 종족(팀) ID별 대표 캐릭터 및 이름 매핑 (public/ 폴더 로컬 PNG)
 const TEAM_CONFIG = {
   rakko: { name: '랏코', image: '/rakko.png' },
   chiikawa: { name: '치이카와', image: '/chiikawa.png' },
@@ -24,7 +22,6 @@ const TEAM_CONFIG = {
   shisa: { name: '시사', image: '/shisa.png' },
 }
 
-// 🔮 랏코 스승의 운세 목록 데이터
 const FORTUNES = [
   { grade: '대길 🌟', quote: '오늘 너의 검 끝은 매섭군! 무슨 일이든 당당하게 임하라.', points: 5 },
   { grade: '중길 ⚔️', quote: '기본 자세가 제일 중요하다. 방심하지 마라!', points: 3 },
@@ -33,7 +30,6 @@ const FORTUNES = [
   { grade: '말길 🍃', quote: '과자는 적당히 먹고, 제초 수련부터 차근차근 시작해라.', points: 1 },
 ]
 
-// 🏅 포인트 구간별 자동 칭호 산정 함수
 const getTitleByPoints = (points = 0) => {
   if (points >= 200000) return { name: '👑 제초 썩은물', color: '#8b5cf6', bg: '#f3e8ff' }
   if (points >= 100000) return { name: '⚔️ 특급 예초기', color: '#d97706', bg: '#fef3c7' }
@@ -42,31 +38,23 @@ const getTitleByPoints = (points = 0) => {
   return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
 }
 
-// 🛡️ 오버워치 최고 역할군 및 점수 계산 함수 (탱/딜/힐 중 최고점 산출)
 const getHighestOwMMR = (profile) => {
   if (!profile) return '언랭크'
-
   const roles = [
     { name: '탱', score: profile.tank_mmr || 0 },
     { name: '딜', score: profile.deal_mmr || 0 },
     { name: '힐', score: profile.heal_mmr || 0 },
   ]
-
   roles.sort((a, b) => b.score - a.score)
-
   const highest = roles[0]
-  if (!highest || highest.score <= 1000) {
-    return '언랭크'
-  }
-
+  if (!highest || highest.score <= 1000) return '언랭크'
   return `${highest.name} ${highest.score} pt`
 }
 
-// 📅 날짜 문자열에서 'MM-DD' 추출 함수
 const getMMDD = (dateStr) => {
   if (!dateStr) return ''
   const clean = String(dateStr).split('T')[0].split(' ')[0].trim()
-  const parts = clean.split(/[-/.]/)  // 'MM-DD', 'MM/DD', 'MM.DD' 모두 허용
+  const parts = clean.split(/[-/.]/)
   if (parts.length >= 2) {
     const m = parts[parts.length - 2].padStart(2, '0')
     const d = parts[parts.length - 1].padStart(2, '0')
@@ -75,7 +63,6 @@ const getMMDD = (dateStr) => {
   return ''
 }
 
-// ⏰ 시간 문자열 (HH:MM) 추출 함수
 const getTimeStr = (dateStr) => {
   if (!dateStr) return ''
   const str = String(dateStr).trim()
@@ -96,29 +83,18 @@ const getTimeStr = (dateStr) => {
   return ''
 }
 
-// 📅 일정 날짜 비교 판별 함수
 const isScheduleForDate = (schedule, targetDateStr) => {
   if (!schedule || !schedule.event_date) return false
-  
   const isBirthday = schedule.category && schedule.category.includes('생일')
-  if (isBirthday) {
-    return getMMDD(schedule.event_date) === getMMDD(targetDateStr)
-  }
-  
+  if (isBirthday) return getMMDD(schedule.event_date) === getMMDD(targetDateStr)
   const cleanEventDate = String(schedule.event_date).split('T')[0].split(' ')[0].trim()
   const cleanTargetDate = String(targetDateStr).split('T')[0].split(' ')[0].trim()
   return cleanEventDate === cleanTargetDate
 }
 
-
-// 🔗 디스코드 서버(길드) ID — 값을 넣으면 일정 카드에 "디스코드에서 보기" 버튼이 나타납니다.
-// (디스코드 개발자 모드 → 서버 아이콘 우클릭 → 서버 ID 복사)
 const DISCORD_GUILD_ID = '1529434801134637106'
-
-// 🕘 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
 const getKstToday = () => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-// 📱 모바일 화면 감지 (기본: 너비 640px 이하)
 const useIsMobile = (breakpoint = 640) => {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
@@ -137,7 +113,6 @@ const useIsMobile = (breakpoint = 640) => {
   return isMobile
 }
 
-// 🏷️ 일정 분류별 색상
 const CATEGORY_STYLE = {
   '발로란트': { bg: '#ffe4e6', color: '#be123c' },
   '오버워치': { bg: '#ffedd5', color: '#c2410c' },
@@ -147,14 +122,12 @@ const CATEGORY_STYLE = {
 }
 const getCategoryStyle = (category) => CATEGORY_STYLE[category] || { bg: '#f1f5f9', color: '#475569' }
 
-// 📆 일정 날짜 → { y, mo, d, hh, mm } (시간이 없으면 hh/mm 는 null)
 const parseScheduleStart = (dateStr) => {
   const m = String(dateStr || '').trim().match(/(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
   if (!m) return null
   return { y: +m[1], mo: +m[2], d: +m[3], hh: m[4] != null ? +m[4] : null, mm: m[5] != null ? +m[5] : null }
 }
 
-// ⏳ D-day 라벨 (오늘 / D-n / 종료)
 const getDDay = (dateStr) => {
   const st = parseScheduleStart(dateStr)
   if (!st) return null
@@ -166,7 +139,6 @@ const getDDay = (dateStr) => {
 }
 
 const pad2 = (n) => String(n).padStart(2, '0')
-// 시간 정보가 있으면 2시간짜리 일정으로, 없으면 종일 일정으로 만든다 (모두 한국 시간)
 const getCalendarRange = (dateStr) => {
   const st = parseScheduleStart(dateStr)
   if (!st) return null
@@ -187,7 +159,6 @@ const getCalendarRange = (dateStr) => {
   return { allDay: false, start: fmt(startMs), end: fmt(startMs + 2 * 3600 * 1000) }
 }
 
-// 📅 구글 캘린더에 추가하는 링크
 const buildGoogleCalendarUrl = (sch) => {
   const range = getCalendarRange(sch.event_date)
   if (!range) return null
@@ -201,7 +172,6 @@ const buildGoogleCalendarUrl = (sch) => {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
-// 💾 .ics 파일 다운로드 (아이폰 캘린더, 삼성 캘린더, 아웃룩 등)
 const downloadIcs = (sch) => {
   const range = getCalendarRange(sch.event_date)
   if (!range) return
@@ -242,30 +212,25 @@ export default function App() {
   const [allProfiles, setAllProfiles] = useState([])
   const [userPoints, setUserPoints] = useState(0)
 
-  // 🔮 오늘의 운세 관련 상태
+  // ⚔️ 오늘 자 종족별 레이드 점수/참여 인원 상태
+  const [todayRaidStats, setTodayRaidStats] = useState({})
+
   const [todayFortune, setTodayFortune] = useState(null)
   const [hasDrawnFortune, setHasDrawnFortune] = useState(false)
 
-  // 🗡️ 토벌 수련 관련 상태
   const [subjugationStatus, setSubjugationStatus] = useState('idle')
   const [subjugationResult, setSubjugationResult] = useState(null)
   const [monsterStartTime, setMonsterStartTime] = useState(null)
   const [subjugationTimer, setSubjugationTimer] = useState(null)
 
-  // 🌿 제초 관련 상태 (종족(팀)당 하루 1,000회 제한 — DB 함수 try_team_weed 가 서버에서 검사)
   const [myTeamInfo, setMyTeamInfo] = useState(null)
   const [teamDailyWeedUsed, setTeamDailyWeedUsed] = useState(0)
   const [weedingCooldown, setWeedingCooldown] = useState(false)
 
-  // 🎴 제자 프로필 모달 상태
   const [selectedProfileModal, setSelectedProfileModal] = useState({
-    isOpen: false,
-    loading: false,
-    profile: null,
-    userPosts: []
+    isOpen: false, loading: false, profile: null, userPosts: []
   })
 
-  // 💬 게시판 관련 상태
   const [posts, setPosts] = useState([])
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('all')
   const [newTitle, setNewTitle] = useState('')
@@ -273,17 +238,14 @@ export default function App() {
   const [newCategory, setNewCategory] = useState('자유')
   const [postTeam, setPostTeam] = useState('rakko')
 
-  // 이미지 업로드 상태
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 댓글 관련 상태
   const [expandedPostIds, setExpandedPostIds] = useState([])
   const [commentsMap, setCommentsMap] = useState({})
   const [commentInputs, setCommentInputs] = useState({})
 
-  // 좋아요 목록 (localStorage 연동)
   const [likedPostIds, setLikedPostIds] = useState(() => {
     try {
       const saved = localStorage.getItem('rakko_liked_posts')
@@ -293,12 +255,10 @@ export default function App() {
     }
   })
 
-  // 📅 일정/달력 관련 상태
   const [schedules, setSchedules] = useState([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDateStr, setSelectedDateStr] = useState(getKstToday())
 
-  // 🛡️ 관리자 여부 확인 (서버 함수 is_admin 이 판정)
   useEffect(() => {
     let cancelled = false
     const checkAdmin = async () => {
@@ -319,7 +279,6 @@ export default function App() {
 
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
-
     const savedFortuneDate = localStorage.getItem('rakko_fortune_date')
     const savedFortuneData = localStorage.getItem('rakko_fortune_data')
     if (savedFortuneDate === todayStr && savedFortuneData) {
@@ -329,7 +288,6 @@ export default function App() {
 
     const syncUserProfile = async (currentSession) => {
       if (!currentSession?.user) return
-
       const user = currentSession.user
       const discordId = user.user_metadata?.provider_id || user.user_metadata?.sub || ''
       const username = user.user_metadata?.full_name || user.user_metadata?.name || '익명'
@@ -343,10 +301,7 @@ export default function App() {
           .select('*')
           .or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
 
-        if (error) {
-          console.error('프로필 조회 실패:', error.message)
-          return
-        }
+        if (error) return
 
         const existingProfile = profiles && profiles.length > 0 ? profiles[0] : null
 
@@ -372,9 +327,7 @@ export default function App() {
             chat_count: 0
           })
         }
-      } catch (err) {
-        console.error('프로필 동기화 중 예외 발생:', err)
-      }
+      } catch (err) {}
     }
 
     supabase.auth.getSession().then(({ data: { session: initSession } }) => {
@@ -388,6 +341,7 @@ export default function App() {
     })
 
     fetchTeamScores()
+    fetchTodayRaidStats()
     fetchUserProfiles()
     fetchPosts()
     fetchSchedules()
@@ -411,12 +365,26 @@ export default function App() {
     }
   }
 
-  // 🌿 제초 1회 처리: 팀당 하루 1,000회 제한 검사 + 개인/팀 포인트 + 팀 제초 횟수를 DB 함수 하나로 원자적 처리
+  // ⚔️ 오늘 레이드 종족별 참여 점수 불러오기
+  const fetchTodayRaidStats = async () => {
+    const { data, error } = await supabase.rpc('raid_get_state')
+    if (!error && data?.team_damage) {
+      const map = {}
+      data.team_damage.forEach((t) => {
+        map[t.team_id] = {
+          damage: t.damage || 0,
+          participants: t.participants || 0,
+          raid_points: t.raid_points || 0,
+        }
+      })
+      setTodayRaidStats(map)
+    }
+  }
+
   const executeWeedingRpc = async () => {
     try {
       const { data, error } = await supabase.rpc('try_team_weed')
       if (error) {
-        console.error('제초 처리 중 오류 발생:', error)
         alert('제초 처리 중 오류가 발생했습니다: ' + error.message)
         return
       }
@@ -442,12 +410,9 @@ export default function App() {
       setMyTeamInfo((prev) => prev ? { ...prev, total_points: result.team_points, weed_count: result.team_weed_count } : prev)
       fetchTeamScores()
       fetchUserProfiles()
-    } catch (err) {
-      console.error('제초 처리 중 오류 발생:', err)
-    }
+    } catch (err) {}
   }
 
-  // 🌟 공통 포인트 DB 동시 업데이트 함수 (운세/토벌 등 제초 외 포인트용. 제초는 executeWeedingRpc 사용)
   const updateUserAndTeamPoints = async (pointsToAdd, isWeeding = false) => {
     if (!session) return
 
@@ -472,13 +437,11 @@ export default function App() {
       const currentProfPoints = profile.points || 0
       const newProfPoints = currentProfPoints + pointsToAdd
 
-      // 1. 유저 개인 프로필 DB 업데이트
       await supabase
         .from('user_profiles')
         .update({ points: newProfPoints })
         .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
 
-      // 2. 팀 점수 및 팀 제초 횟수 DB 업데이트
       if (targetTeam) {
         const { data: teamData } = await supabase
           .from('team_scores')
@@ -501,9 +464,7 @@ export default function App() {
       setUserPoints((prev) => prev + pointsToAdd)
       fetchTeamScores()
       fetchUserProfiles()
-    } catch (err) {
-      console.error('포인트 반영 중 오류 발생:', err)
-    }
+    } catch (err) {}
   }
 
   const fetchTeamScores = async () => {
@@ -543,10 +504,7 @@ export default function App() {
         .not('birthday', 'is', null)
 
       let combinedSchedules = []
-
-      if (!scheduleError && scheduleData) {
-        combinedSchedules = [...scheduleData]
-      }
+      if (!scheduleError && scheduleData) combinedSchedules = [...scheduleData]
 
       if (!profileError && profileData) {
         const profileBirthdays = profileData
@@ -564,14 +522,11 @@ export default function App() {
       }
 
       setSchedules(combinedSchedules)
-    } catch (err) {
-      console.error('일정 불러오기 중 오류 발생:', err)
-    }
+    } catch (err) {}
   }
 
   const handleOpenProfileModal = async (userId, authorName, authorAvatar) => {
     setSelectedProfileModal({ isOpen: true, loading: true, profile: null, userPosts: [] })
-
     let profileData = null
     try {
       if (userId) {
@@ -582,7 +537,6 @@ export default function App() {
           .maybeSingle()
         profileData = data
       }
-
       if (!profileData && authorName) {
         const { data } = await supabase
           .from('user_profiles')
@@ -591,23 +545,16 @@ export default function App() {
           .maybeSingle()
         profileData = data
       }
-    } catch (err) {
-      console.error('프로필 정보 조회 실패:', err)
-    }
+    } catch (err) {}
 
     let postsData = []
     try {
       let query = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(5)
-      if (userId) {
-        query = query.or(`user_id.eq.${userId}`)
-      } else if (authorName) {
-        query = query.eq('author_name', authorName)
-      }
+      if (userId) query = query.or(`user_id.eq.${userId}`)
+      else if (authorName) query = query.eq('author_name', authorName)
       const { data } = await query
       if (data) postsData = data
-    } catch (err) {
-      console.error('유저 작성 글 조회 실패:', err)
-    }
+    } catch (err) {}
 
     setSelectedProfileModal({
       isOpen: true,
@@ -627,19 +574,11 @@ export default function App() {
   }
 
   const handleDrawFortune = async () => {
-    if (!session) {
-      alert('로그인이 필요한 수련입니다!')
-      return
-    }
-
+    if (!session) { alert('로그인이 필요한 수련입니다!'); return }
     const todayStr = new Date().toISOString().slice(0, 10)
-    if (hasDrawnFortune) {
-      alert('오늘의 운세는 이미 뽑으셨습니다! 내일 다시 도전해 주세요.')
-      return
-    }
+    if (hasDrawnFortune) { alert('오늘의 운세는 이미 뽑으셨습니다! 내일 다시 도전해 주세요.'); return }
 
     const randomFortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)]
-    
     setTodayFortune(randomFortune)
     setHasDrawnFortune(true)
     localStorage.setItem('rakko_fortune_date', todayStr)
@@ -648,25 +587,17 @@ export default function App() {
     await updateUserAndTeamPoints(randomFortune.points, false)
   }
 
-  // 🗡️ 토벌 수련 시작
   const handleStartSubjugation = () => {
-    if (!session) {
-      alert('로그인이 필요한 수련입니다!')
-      return
-    }
-
+    if (!session) { alert('로그인이 필요한 수련입니다!'); return }
     setSubjugationStatus('waiting')
     const randomDelay = Math.floor(Math.random() * 2000) + 1500
-
     const timer = setTimeout(() => {
       setSubjugationStatus('ready')
       setMonsterStartTime(Date.now())
     }, randomDelay)
-
     setSubjugationTimer(timer)
   }
 
-  // 🗡️ 토벌 몬스터 클릭
   const handleMonsterClick = async () => {
     if (subjugationStatus === 'waiting') {
       clearTimeout(subjugationTimer)
@@ -679,33 +610,23 @@ export default function App() {
       const reactionTime = Date.now() - monsterStartTime
       let result = { reactionTime, grade: 'C급 🍃', points: 1 }
 
-      if (reactionTime < 250) {
-        result = { reactionTime, grade: 'S급 🗡️', points: 10 }
-      } else if (reactionTime < 350) {
-        result = { reactionTime, grade: 'A급 ⚔️', points: 5 }
-      } else if (reactionTime < 500) {
-        result = { reactionTime, grade: 'B급 🛡️', points: 3 }
-      }
+      if (reactionTime < 250) result = { reactionTime, grade: 'S급 🗡️', points: 10 }
+      else if (reactionTime < 350) result = { reactionTime, grade: 'A급 ⚔️', points: 5 }
+      else if (reactionTime < 500) result = { reactionTime, grade: 'B급 🛡️', points: 3 }
 
       setSubjugationResult(result)
       setSubjugationStatus('finished')
-
       await updateUserAndTeamPoints(result.points, false)
     }
   }
 
-  // 🗡️ 토벌 수련 다시 도전하기
   const handleRetrySubjugation = () => {
     setSubjugationStatus('idle')
     setSubjugationResult(null)
   }
 
-  // 🌿 1. 잡초 뽑기 클릭 핸들러 (종족(팀)당 하루 1,000회 제한)
   const handleWeedingClick = async () => {
-    if (!session) {
-      alert('로그인이 필요한 수련입니다!')
-      return
-    }
+    if (!session) { alert('로그인이 필요한 수련입니다!'); return }
     if (weedingCooldown) return
 
     const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
@@ -726,7 +647,6 @@ export default function App() {
       .eq('team_id', profile.team_id)
       .maybeSingle()
 
-    // 오늘(KST) 우리 팀이 이미 1,000회를 채웠으면 바로 안내 (최종 검사는 서버 함수가 다시 수행)
     const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const dbWeedDate = teamData?.daily_weed_date ? String(teamData.daily_weed_date).split('T')[0] : ''
     const teamUsedToday = dbWeedDate === kstToday ? (teamData?.daily_weed_count || 0) : 0
@@ -739,13 +659,9 @@ export default function App() {
     await executeWeeding()
   }
 
-  // 🌿 2. 제초 포인트 및 팀 전체 횟수 1 증가 (0.2초 쿨타임)
   const executeWeeding = async () => {
     setWeedingCooldown(true)
-    setTimeout(() => {
-      setWeedingCooldown(false)
-    }, 200)
-
+    setTimeout(() => { setWeedingCooldown(false) }, 200)
     await updateUserAndTeamPoints(2, true)
   }
 
@@ -772,16 +688,10 @@ export default function App() {
 
   const handleCreateComment = async (postId, e) => {
     e.preventDefault()
-    if (!session) {
-      alert('로그인이 필요한 기능입니다!')
-      return
-    }
+    if (!session) { alert('로그인이 필요한 기능입니다!'); return }
 
     const content = (commentInputs[postId] || '').trim()
-    if (!content) {
-      alert('댓글 내용을 입력해 주세요.')
-      return
-    }
+    if (!content) { alert('댓글 내용을 입력해 주세요.'); return }
 
     const authorName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '무명 제자'
     const avatarUrl = session.user.user_metadata?.avatar_url || ''
@@ -811,14 +721,9 @@ export default function App() {
       alert('본인이 작성한 댓글만 삭제할 수 있습니다.')
       return
     }
-
     if (!window.confirm('이 댓글을 삭제하시겠습니까?')) return
 
-    const { error } = await supabase
-      .from('comments')
-      .delete()
-      .eq('id', commentId)
-
+    const { error } = await supabase.from('comments').delete().eq('id', commentId)
     if (error) {
       alert('삭제 중 오류가 발생했습니다: ' + error.message)
     } else {
@@ -830,16 +735,8 @@ export default function App() {
   const handleImageChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
-
-    if (!file.type.startsWith('image/')) {
-      alert('이미지 파일만 업로드할 수 있습니다.')
-      return
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('파일 크기는 5MB 이하만 업로드 가능합니다.')
-      return
-    }
+    if (!file.type.startsWith('image/')) { alert('이미지 파일만 업로드할 수 있습니다.'); return }
+    if (file.size > 5 * 1024 * 1024) { alert('파일 크기는 5MB 이하만 업로드 가능합니다.'); return }
 
     setImageFile(file)
     setImagePreview(URL.createObjectURL(file))
@@ -852,39 +749,25 @@ export default function App() {
 
   const handleCreatePost = async (e) => {
     e.preventDefault()
-    if (!session) {
-      alert('로그인이 필요한 기능입니다!')
-      return
-    }
-    if (!newTitle.trim() || !newContent.trim()) {
-      alert('제목과 내용을 모두 입력해 주세요.')
-      return
-    }
+    if (!session) { alert('로그인이 필요한 기능입니다!'); return }
+    if (!newTitle.trim() || !newContent.trim()) { alert('제목과 내용을 모두 입력해 주세요.'); return }
 
     setIsSubmitting(true)
     const authorName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '무명 제자'
     const userId = session.user.id
 
     let uploadedImageUrl = null
-
     if (imageFile) {
       const fileExt = imageFile.name.split('.').pop()
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
 
-      const { error: uploadError } = await supabase.storage
-        .from('post-images')
-        .upload(fileName, imageFile)
-
+      const { error: uploadError } = await supabase.storage.from('post-images').upload(fileName, imageFile)
       if (uploadError) {
         alert('이미지 업로드 실패: ' + uploadError.message)
         setIsSubmitting(false)
         return
       }
-
-      const { data: urlData } = supabase.storage
-        .from('post-images')
-        .getPublicUrl(fileName)
-
+      const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(fileName)
       uploadedImageUrl = urlData.publicUrl
     }
 
@@ -901,7 +784,6 @@ export default function App() {
     ])
 
     setIsSubmitting(false)
-
     if (error) {
       alert('글 작성 중 오류가 발생했습니다: ' + error.message)
     } else {
@@ -915,75 +797,41 @@ export default function App() {
 
   const handleDeletePost = async (postId, postUserId) => {
     if (!session) return
-    if (session.user.id !== postUserId) {
-      alert('본인이 작성한 글만 삭제할 수 있습니다.')
-      return
-    }
-
+    if (session.user.id !== postUserId) { alert('본인이 작성한 글만 삭제할 수 있습니다.'); return }
     if (!window.confirm('정말 이 게시글을 삭제하시겠습니까?')) return
 
-    const { error } = await supabase
-      .from('posts')
-      .delete()
-      .eq('id', postId)
-
-    if (error) {
-      alert('삭제 중 오류가 발생했습니다: ' + error.message)
-    } else {
-      fetchPosts()
-    }
+    const { error } = await supabase.from('posts').delete().eq('id', postId)
+    if (error) alert('삭제 중 오류가 발생했습니다: ' + error.message)
+    else fetchPosts()
   }
 
   const handleLikePost = async (postId, currentLikes) => {
-    if (!session) {
-      alert('로그인이 필요한 기능입니다!')
-      return
-    }
+    if (!session) { alert('로그인이 필요한 기능입니다!'); return }
 
     const isAlreadyLiked = likedPostIds.includes(postId)
-    const newLikesCount = isAlreadyLiked 
-      ? Math.max(0, (currentLikes || 0) - 1) 
-      : (currentLikes || 0) + 1
-
-    const updatedLikedIds = isAlreadyLiked
-      ? likedPostIds.filter((id) => id !== postId)
-      : [...likedPostIds, postId]
+    const newLikesCount = isAlreadyLiked ? Math.max(0, (currentLikes || 0) - 1) : (currentLikes || 0) + 1
+    const updatedLikedIds = isAlreadyLiked ? likedPostIds.filter((id) => id !== postId) : [...likedPostIds, postId]
 
     setLikedPostIds(updatedLikedIds)
-    try {
-      localStorage.setItem('rakko_liked_posts', JSON.stringify(updatedLikedIds))
-    } catch (err) {
-      console.error('localStorage 저장 실패:', err)
-    }
+    try { localStorage.setItem('rakko_liked_posts', JSON.stringify(updatedLikedIds)) } catch (err) {}
 
-    const { error } = await supabase
-      .from('posts')
-      .update({ likes: newLikesCount })
-      .eq('id', postId)
-
-    if (!error) {
-      fetchPosts()
-    }
+    const { error } = await supabase.from('posts').update({ likes: newLikesCount }).eq('id', postId)
+    if (!error) fetchPosts()
   }
 
   const handleDiscordLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'discord',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     })
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-  }
+  const handleLogout = async () => { await supabase.auth.signOut() }
 
   const filteredPosts = selectedTeamFilter === 'all'
     ? posts
     : posts.filter((p) => p.team_id === selectedTeamFilter)
 
-  // 🗓️ 달력 날짜 연산
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
@@ -994,8 +842,6 @@ export default function App() {
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
 
   const currentTeamWeedCount = myTeamInfo?.weed_count || 0
-
-  // 🗂️ 선택한 날짜의 일정 카드 (D-day, 분류 색상, 디스코드 이동, 캘린더 추가)
   const selectedSchedules = schedules.filter((s) => isScheduleForDate(s, selectedDateStr))
   const kstTodayStr = getKstToday()
 
@@ -1102,7 +948,6 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: isMobile ? '12px 10px' : '20px 16px' }}>
-      {/* 📱 모바일 전역 보정: 카드 여백 축소, 입력창 자동 확대(iOS) 방지 */}
       <style>{`
         @media (max-width: 640px) {
           .card { padding: 14px !important; }
@@ -1110,20 +955,14 @@ export default function App() {
           button { touch-action: manipulation; }
         }
       `}</style>
+      
       {/* 1. 상단 프로필 & 헤더 */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '14px' : '20px', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img 
             src={RAKKO_MASTER_IMAGE} 
             alt="스승 랏코" 
-            style={{ 
-              width: '48px', 
-              height: '48px', 
-              borderRadius: '14px', 
-              backgroundColor: '#fef3c7', 
-              padding: '3px',
-              objectFit: 'cover' 
-            }} 
+            style={{ width: '48px', height: '48px', borderRadius: '14px', backgroundColor: '#fef3c7', padding: '3px', objectFit: 'cover' }} 
           />
           <div>
             <h1 style={{ margin: 0, fontSize: isMobile ? '17px' : '20px', fontWeight: '800' }}>랏코와 제자들</h1>
@@ -1136,16 +975,9 @@ export default function App() {
             onClick={() => handleOpenProfileModal(session.user.id, session.user.user_metadata?.full_name, session.user.user_metadata?.avatar_url)}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', padding: '6px 12px', borderRadius: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}
           >
-            <img 
-              src={session.user.user_metadata?.avatar_url} 
-              alt="avatar" 
-              style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-            />
+            <img src={session.user.user_metadata?.avatar_url} alt="avatar" style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
             <span style={{ fontWeight: '600', fontSize: '13px', maxWidth: isMobile ? '84px' : '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.user.user_metadata?.full_name}</span>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleLogout(); }} 
-              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', padding: 0 }}
-            >
+            <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', padding: 0 }}>
               <LogOut size={15}/>
             </button>
           </div>
@@ -1162,20 +994,10 @@ export default function App() {
           type="button"
           onClick={() => setActiveTab('home')}
           style={{
-            flex: '1 0 auto',
-            padding: isMobile ? '9px 10px' : '10px 12px',
-            borderRadius: '12px',
+            flex: '1 0 auto', padding: isMobile ? '9px 10px' : '10px 12px', borderRadius: '12px',
             border: activeTab === 'home' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-            background: activeTab === 'home' ? '#eff6ff' : '#fff',
-            color: activeTab === 'home' ? '#1d4ed8' : '#64748b',
-            fontWeight: '700',
-            fontSize: isMobile ? '12px' : '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            whiteSpace: 'nowrap'
+            background: activeTab === 'home' ? '#eff6ff' : '#fff', color: activeTab === 'home' ? '#1d4ed8' : '#64748b',
+            fontWeight: '700', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap'
           }}
         >
           <LayoutDashboard size={16} /> 대시보드
@@ -1185,20 +1007,10 @@ export default function App() {
           type="button"
           onClick={() => setActiveTab('training')}
           style={{
-            flex: '1 0 auto',
-            padding: isMobile ? '9px 10px' : '10px 12px',
-            borderRadius: '12px',
+            flex: '1 0 auto', padding: isMobile ? '9px 10px' : '10px 12px', borderRadius: '12px',
             border: activeTab === 'training' ? '2px solid #d97706' : '1px solid #e2e8f0',
-            background: activeTab === 'training' ? '#fffbe3' : '#fff',
-            color: activeTab === 'training' ? '#b45309' : '#64748b',
-            fontWeight: '700',
-            fontSize: isMobile ? '12px' : '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            whiteSpace: 'nowrap'
+            background: activeTab === 'training' ? '#fffbe3' : '#fff', color: activeTab === 'training' ? '#b45309' : '#64748b',
+            fontWeight: '700', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap'
           }}
         >
           <Swords size={16} /> 수련의 전당
@@ -1208,20 +1020,10 @@ export default function App() {
           type="button"
           onClick={() => setActiveTab('community')}
           style={{
-            flex: '1 0 auto',
-            padding: isMobile ? '9px 10px' : '10px 12px',
-            borderRadius: '12px',
+            flex: '1 0 auto', padding: isMobile ? '9px 10px' : '10px 12px', borderRadius: '12px',
             border: activeTab === 'community' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-            background: activeTab === 'community' ? '#eff6ff' : '#fff',
-            color: activeTab === 'community' ? '#1d4ed8' : '#64748b',
-            fontWeight: '700',
-            fontSize: isMobile ? '12px' : '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            whiteSpace: 'nowrap'
+            background: activeTab === 'community' ? '#eff6ff' : '#fff', color: activeTab === 'community' ? '#1d4ed8' : '#64748b',
+            fontWeight: '700', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap'
           }}
         >
           <MessageSquare size={16} /> 팀 커뮤니티
@@ -1231,20 +1033,10 @@ export default function App() {
           type="button"
           onClick={() => setActiveTab('calendar')}
           style={{
-            flex: '1 0 auto',
-            padding: isMobile ? '9px 10px' : '10px 12px',
-            borderRadius: '12px',
+            flex: '1 0 auto', padding: isMobile ? '9px 10px' : '10px 12px', borderRadius: '12px',
             border: activeTab === 'calendar' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
-            background: activeTab === 'calendar' ? '#f5f3ff' : '#fff',
-            color: activeTab === 'calendar' ? '#6d28d9' : '#64748b',
-            fontWeight: '700',
-            fontSize: isMobile ? '12px' : '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            whiteSpace: 'nowrap'
+            background: activeTab === 'calendar' ? '#f5f3ff' : '#fff', color: activeTab === 'calendar' ? '#6d28d9' : '#64748b',
+            fontWeight: '700', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap'
           }}
         >
           <CalendarIcon size={16} /> 📅 일정 달력
@@ -1255,20 +1047,10 @@ export default function App() {
             type="button"
             onClick={() => setActiveTab('admin')}
             style={{
-              flex: '1 0 auto',
-              padding: isMobile ? '9px 10px' : '10px 12px',
-              borderRadius: '12px',
+              flex: '1 0 auto', padding: isMobile ? '9px 10px' : '10px 12px', borderRadius: '12px',
               border: activeTab === 'admin' ? '2px solid #dc2626' : '1px solid #e2e8f0',
-              background: activeTab === 'admin' ? '#fef2f2' : '#fff',
-              color: activeTab === 'admin' ? '#b91c1c' : '#64748b',
-              fontWeight: '700',
-              fontSize: isMobile ? '12px' : '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap'
+              background: activeTab === 'admin' ? '#fef2f2' : '#fff', color: activeTab === 'admin' ? '#b91c1c' : '#64748b',
+              fontWeight: '700', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap'
             }}
           >
             <Shield size={16} /> 관리자
@@ -1326,12 +1108,17 @@ export default function App() {
                       <span style={{ fontWeight: '700', fontSize: '14px' }}>{team.team_name}</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', flexWrap: 'wrap' }}>
                       <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <MessageSquare size={13}/> {(team.weekly_chats || 0).toLocaleString()}회
                       </span>
                       <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         🌱 제초: {(team.weed_count || 0).toLocaleString()}회
+                      </span>
+                      {/* ⚔️ 오늘 레이드 참여 점수 표시 */}
+                      <span style={{ color: '#7c3aed', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', background: '#f5f3ff', padding: '2px 8px', borderRadius: '8px', border: '1px solid #ddd6fe' }}>
+                        ⚔️ 레이드: +{(todayRaidStats[team.team_id]?.raid_points || 0).toLocaleString()} pt
+                        <span style={{ fontSize: '11px', color: '#6d28d9', fontWeight: '500' }}>({todayRaidStats[team.team_id]?.participants || 0}명)</span>
                       </span>
                       <span style={{ fontWeight: '800', color: '#d97706', fontSize: '15px' }}>
                         {(team.total_points || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '500' }}>pt</span>
@@ -1352,17 +1139,9 @@ export default function App() {
                           key={member.id || member.user_id || member.discord_id}
                           onClick={() => handleOpenProfileModal(member.user_id, member.username, member.avatar_url)}
                           style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: '#fff',
-                            border: '1px solid #cbd5e1',
-                            padding: '3px 8px',
-                            borderRadius: '14px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            color: '#334155'
+                            display: 'flex', alignItems: 'center', gap: '4px', background: '#fff',
+                            border: '1px solid #cbd5e1', padding: '3px 8px', borderRadius: '14px',
+                            cursor: 'pointer', fontSize: '11px', fontWeight: '600', color: '#334155'
                           }}
                           title={`${member.username} 제자 프로필 보기`}
                         >
@@ -1388,7 +1167,6 @@ export default function App() {
       {/* ========================================================= */}
       {activeTab === 'training' && (
         <>
-          {/* 🐉 종족 합동 보스 레이드 (서버가 데미지/보상을 계산, 실시간 연동) */}
           <RaidGame
             supabase={supabase}
             session={session}
@@ -1396,6 +1174,7 @@ export default function App() {
             isMobile={isMobile}
             onChanged={async () => {
               fetchTeamScores()
+              fetchTodayRaidStats()
               fetchUserProfiles()
               if (session) {
                 const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
@@ -1425,13 +1204,8 @@ export default function App() {
                 onClick={handleDrawFortune}
                 disabled={hasDrawnFortune}
                 style={{
-                  background: hasDrawnFortune ? '#cbd5e1' : '#d97706',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  fontWeight: '700',
-                  fontSize: '13px',
+                  background: hasDrawnFortune ? '#cbd5e1' : '#d97706', color: '#fff', border: 'none',
+                  padding: '8px 12px', borderRadius: '10px', fontWeight: '700', fontSize: '13px',
                   cursor: hasDrawnFortune ? 'default' : 'pointer'
                 }}
               >
@@ -1470,14 +1244,8 @@ export default function App() {
                   type="button"
                   onClick={handleStartSubjugation}
                   style={{
-                    background: '#dc2626',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 12px',
-                    borderRadius: '10px',
-                    fontWeight: '700',
-                    fontSize: '13px',
-                    cursor: 'pointer'
+                    background: '#dc2626', color: '#fff', border: 'none', padding: '8px 12px',
+                    borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer'
                   }}
                 >
                   시작 🗡️
@@ -1488,14 +1256,7 @@ export default function App() {
             {subjugationStatus === 'waiting' && (
               <div 
                 onClick={handleMonsterClick}
-                style={{
-                  background: '#fee2e2',
-                  border: '2px dashed #f87171',
-                  padding: '18px',
-                  borderRadius: '10px',
-                  textAlign: 'center',
-                  cursor: 'pointer'
-                }}
+                style={{ background: '#fee2e2', border: '2px dashed #f87171', padding: '18px', borderRadius: '10px', textAlign: 'center', cursor: 'pointer' }}
               >
                 <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#991b1b' }}>
                   👀 기회를 노리는 중... 나타날 때까지 대기하세요!
@@ -1506,15 +1267,7 @@ export default function App() {
             {subjugationStatus === 'ready' && (
               <div 
                 onClick={handleMonsterClick}
-                style={{
-                  background: '#ef4444',
-                  padding: '22px',
-                  borderRadius: '10px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  color: '#fff',
-                  boxShadow: '0 0 12px rgba(239,68,68,0.5)'
-                }}
+                style={{ background: '#ef4444', padding: '22px', borderRadius: '10px', textAlign: 'center', cursor: 'pointer', color: '#fff', boxShadow: '0 0 12px rgba(239,68,68,0.5)' }}
               >
                 <p style={{ margin: 0, fontSize: '18px', fontWeight: '900' }}>
                   👾 몬스터 출현! 클릭하세요!!!
@@ -1542,18 +1295,8 @@ export default function App() {
                   type="button"
                   onClick={handleRetrySubjugation}
                   style={{
-                    background: '#dc2626',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px',
-                    borderRadius: '8px',
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px'
+                    background: '#dc2626', color: '#fff', border: 'none', padding: '8px', borderRadius: '8px',
+                    fontWeight: '700', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
                   }}
                 >
                   <RotateCcw size={14} /> 다시 도전하기 🗡️
@@ -1577,8 +1320,7 @@ export default function App() {
                 disabled={weedingCooldown || teamDailyWeedUsed >= 1000}
                 className="btn-weed" 
                 style={{ 
-                  padding: '8px 12px', 
-                  fontSize: '13px',
+                  padding: '8px 12px', fontSize: '13px',
                   opacity: (weedingCooldown || teamDailyWeedUsed >= 1000) ? 0.6 : 1,
                   cursor: (weedingCooldown || teamDailyWeedUsed >= 1000) ? 'not-allowed' : 'pointer'
                 }}
@@ -1615,18 +1357,11 @@ export default function App() {
               type="button"
               onClick={() => setSelectedTeamFilter('all')}
               style={{
-                padding: '5px 12px',
-                borderRadius: '16px',
-                border: 'none',
+                padding: '5px 12px', borderRadius: '16px', border: 'none',
                 background: selectedTeamFilter === 'all' ? '#3b82f6' : '#f1f5f9',
                 color: selectedTeamFilter === 'all' ? '#fff' : '#475569',
-                fontWeight: '600',
-                fontSize: '12px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
+                fontWeight: '600', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
+                display: 'flex', alignItems: 'center', gap: '4px'
               }}
             >
               <Users size={13} /> 전체보기
@@ -1637,18 +1372,13 @@ export default function App() {
                 key={id}
                 onClick={() => setSelectedTeamFilter(id)}
                 style={{
-                  padding: '5px 12px',
-                  borderRadius: '16px',
+                  padding: '5px 12px', borderRadius: '16px',
                   border: selectedTeamFilter === id ? '2px solid #3b82f6' : '1px solid #e2e8f0',
                   background: selectedTeamFilter === id ? '#eff6ff' : '#fff',
                   color: selectedTeamFilter === id ? '#1d4ed8' : '#334155',
                   fontWeight: selectedTeamFilter === id ? '700' : '500',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
+                  fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center', gap: '4px'
                 }}
               >
                 <img src={info.image} alt={info.name} style={{ width: '15px', height: '15px', borderRadius: '50%', objectFit: 'cover' }} />
@@ -1711,19 +1441,9 @@ export default function App() {
                   type="button"
                   onClick={handleRemoveImage}
                   style={{
-                    position: 'absolute',
-                    top: '-6px',
-                    right: '-6px',
-                    background: '#ef4444',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: '20px',
-                    height: '20px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
+                    position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444',
+                    color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}
                 >
                   <X size={12} />
@@ -1769,10 +1489,7 @@ export default function App() {
                 const commentCount = post.comments?.[0]?.count || 0
 
                 return (
-                  <div 
-                    key={post.id} 
-                    style={{ padding: '14px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}
-                  >
+                  <div key={post.id} style={{ padding: '14px', borderRadius: '12px', border: '1px solid #edf2f7', background: '#fff' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -1793,14 +1510,8 @@ export default function App() {
                               border: '1px solid #e2e8f0', 
                               background: isCommentsExpanded ? '#eff6ff' : '#f8fafc', 
                               color: isCommentsExpanded ? '#2563eb' : '#64748b', 
-                              padding: '3px 8px', 
-                              borderRadius: '14px', 
-                              cursor: 'pointer', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '3px', 
-                              fontSize: '12px', 
-                              fontWeight: '600'
+                              padding: '3px 8px', borderRadius: '14px', cursor: 'pointer', 
+                              display: 'flex', alignItems: 'center', gap: '3px', fontSize: '12px', fontWeight: '600'
                             }}
                           >
                             <MessageCircle size={13} /> {commentCount}
@@ -1813,14 +1524,8 @@ export default function App() {
                               border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
                               background: isLiked ? '#fff0f3' : '#f8fafc', 
                               color: isLiked ? '#e11d48' : '#64748b', 
-                              padding: '3px 8px', 
-                              borderRadius: '14px', 
-                              cursor: 'pointer', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '3px', 
-                              fontSize: '12px', 
-                              fontWeight: '600'
+                              padding: '3px 8px', borderRadius: '14px', cursor: 'pointer', 
+                              display: 'flex', alignItems: 'center', gap: '3px', fontSize: '12px', fontWeight: '600'
                             }}
                           >
                             <Heart size={13} fill={isLiked ? '#e11d48' : 'none'} color={isLiked ? '#e11d48' : '#64748b'} /> 
@@ -1874,10 +1579,7 @@ export default function App() {
 
                     {isCommentsExpanded && (
                       <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #e2e8f0' }}>
-                        <form 
-                          onSubmit={(e) => handleCreateComment(post.id, e)} 
-                          style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}
-                        >
+                        <form onSubmit={(e) => handleCreateComment(post.id, e)} style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
                           <input 
                             type="text" 
                             placeholder={session ? "댓글 남기기..." : "로그인 필요"}
@@ -1886,12 +1588,7 @@ export default function App() {
                             onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
                             style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }}
                           />
-                          <button 
-                            type="submit" 
-                            disabled={!session}
-                            className="btn-primary" 
-                            style={{ padding: '6px 10px', fontSize: '12px', opacity: session ? 1 : 0.6 }}
-                          >
+                          <button type="submit" disabled={!session} className="btn-primary" style={{ padding: '6px 10px', fontSize: '12px', opacity: session ? 1 : 0.6 }}>
                             <Send size={12} /> 등록
                           </button>
                         </form>
@@ -1901,10 +1598,7 @@ export default function App() {
                             <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0' }}>첫 댓글을 남겨보세요!</p>
                           ) : (
                             postComments.map((comment) => (
-                              <div 
-                                key={comment.id} 
-                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 10px', borderRadius: '8px' }}
-                              >
+                              <div key={comment.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8fafc', padding: '8px 10px', borderRadius: '8px' }}>
                                 <div style={{ flex: 1 }}>
                                   <div 
                                     onClick={() => handleOpenProfileModal(comment.user_id, comment.author_name, comment.avatar_url)}
@@ -1922,11 +1616,7 @@ export default function App() {
                                 </div>
 
                                 {session && session.user.id === comment.user_id && (
-                                  <button 
-                                    type="button"
-                                    onClick={() => handleDeleteComment(comment.id, post.id, comment.user_id)}
-                                    style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                  >
+                                  <button type="button" onClick={() => handleDeleteComment(comment.id, post.id, comment.user_id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: '2px' }}>
                                     <Trash2 size={12} />
                                   </button>
                                 )}
@@ -1936,7 +1626,6 @@ export default function App() {
                         </div>
                       </div>
                     )}
-
                   </div>
                 )
               })
@@ -1978,7 +1667,6 @@ export default function App() {
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const dayNum = i + 1
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
-              
               const daySchedules = schedules.filter((s) => isScheduleForDate(s, dateStr))
               const isSelected = selectedDateStr === dateStr
 
@@ -1987,15 +1675,9 @@ export default function App() {
                   key={dateStr}
                   onClick={() => setSelectedDateStr(dateStr)}
                   style={{
-                    height: isMobile ? '48px' : '70px',
-                    padding: '4px',
-                    borderRadius: '8px',
+                    height: isMobile ? '48px' : '70px', padding: '4px', borderRadius: '8px',
                     border: isSelected ? '2px solid #8b5cf6' : dateStr === kstTodayStr ? '1px solid #a78bfa' : '1px solid #f1f5f9',
-                    background: isSelected ? '#f5f3ff' : '#fff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden'
+                    background: isSelected ? '#f5f3ff' : '#fff', cursor: 'pointer', display: 'flex', flexDirection: 'column', overflow: 'hidden'
                   }}
                 >
                   <span style={{ fontSize: '11px', fontWeight: '700', color: isSelected ? '#6d28d9' : '#334155' }}>
@@ -2005,48 +1687,37 @@ export default function App() {
                   {isMobile ? (
                     <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '4px', alignItems: 'center' }}>
                       {daySchedules.slice(0, 3).map((sch) => (
-                        <span
-                          key={sch.id}
-                          style={{ width: '7px', height: '7px', borderRadius: '50%', background: sch.category === '생일' ? '#ec4899' : '#0ea5e9' }}
-                        />
+                        <span key={sch.id} style={{ width: '7px', height: '7px', borderRadius: '50%', background: sch.category === '생일' ? '#ec4899' : '#0ea5e9' }} />
                       ))}
                       {daySchedules.length > 3 && (
                         <span style={{ fontSize: '9px', fontWeight: '800', color: '#64748b' }}>+{daySchedules.length - 3}</span>
                       )}
                     </div>
                   ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', overflowY: 'auto' }}>
-                    {daySchedules.map((sch) => {
-                      const isBirthday = sch.category === '생일'
-                      const timeStr = !isBirthday ? getTimeStr(sch.event_date) : ''
-                      const displayTitle = timeStr ? `[${timeStr}] ${sch.title}` : sch.title
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', overflowY: 'auto' }}>
+                      {daySchedules.map((sch) => {
+                        const isBirthday = sch.category === '생일'
+                        const timeStr = !isBirthday ? getTimeStr(sch.event_date) : ''
+                        const displayTitle = timeStr ? `[${timeStr}] ${sch.title}` : sch.title
 
-                      return (
-                        <div
-                          key={sch.id}
-                          style={{
-                            fontSize: '9px',
-                            padding: '1px 3px',
-                            borderRadius: '4px',
-                            background: isBirthday ? '#fce7f3' : '#e0f2fe',
-                            color: isBirthday ? '#be185d' : '#0369a1',
-                            fontWeight: '700',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '2px'
-                          }}
-                        >
-                          {isBirthday && sch.created_by_avatar ? (
-                            <img src={sch.created_by_avatar} alt="" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
-                          ) : null}
-                          {displayTitle}
-                        </div>
-                      )
-                    })}
-                  </div>
+                        return (
+                          <div
+                            key={sch.id}
+                            style={{
+                              fontSize: '9px', padding: '1px 3px', borderRadius: '4px',
+                              background: isBirthday ? '#fce7f3' : '#e0f2fe', color: isBirthday ? '#be185d' : '#0369a1',
+                              fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                              display: 'flex', alignItems: 'center', gap: '2px'
+                            }}
+                          >
+                            {isBirthday && sch.created_by_avatar ? (
+                              <img src={sch.created_by_avatar} alt="" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
+                            ) : null}
+                            {displayTitle}
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               )
@@ -2070,7 +1741,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* 🛡️ [PAGE 5] 관리자 페이지 (관리자만 보임 / 권한은 DB 함수가 다시 검사) */}
+      {/* 🛡️ [PAGE 5] 관리자 페이지 */}
       {/* ========================================================= */}
       {activeTab === 'admin' && isAdmin && (
         <AdminPanel
@@ -2080,6 +1751,7 @@ export default function App() {
           onDataChanged={() => {
             fetchSchedules()
             fetchTeamScores()
+            fetchTodayRaidStats()
             fetchUserProfiles()
             fetchPosts()
           }}
@@ -2093,71 +1765,36 @@ export default function App() {
         <div 
           onClick={handleCloseProfileModal}
           style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '16px'
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
           }} 
         >
           <div 
             onClick={(e) => e.stopPropagation()} 
             style={{
-              width: '100%',
-              maxWidth: '360px',
-              backgroundColor: '#fff',
-              borderRadius: '20px',
-              overflow: 'hidden',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
-              position: 'relative'
+              width: '100%', maxWidth: '360px', backgroundColor: '#fff', borderRadius: '20px',
+              overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)', position: 'relative'
             }}
           >
             <button 
               onClick={handleCloseProfileModal}
               style={{
-                position: 'absolute',
-                top: '12px',
-                right: '12px',
-                background: 'rgba(0,0,0,0.2)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '50%',
-                width: '28px',
-                height: '28px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                zIndex: 10
+                position: 'absolute', top: '12px', right: '12px', background: 'rgba(0,0,0,0.2)',
+                color: '#fff', border: 'none', borderRadius: '50%', width: '28px', height: '28px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10
               }}
             >
               <X size={15} />
             </button>
 
-            <div style={{
-              background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
-              padding: '24px 16px 16px 16px',
-              textAlign: 'center'
-            }}>
+            <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)', padding: '24px 16px 16px 16px', textAlign: 'center' }}>
               <img 
                 src={selectedProfileModal.profile?.avatar_url || RAKKO_MASTER_IMAGE} 
                 alt="프로필" 
                 style={{
-                  width: '76px',
-                  height: '76px',
-                  borderRadius: '50%',
-                  border: '3px solid #fff',
-                  backgroundColor: '#fff',
-                  objectFit: 'cover',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-                  marginBottom: '6px'
+                  width: '76px', height: '76px', borderRadius: '50%', border: '3px solid #fff',
+                  backgroundColor: '#fff', objectFit: 'cover', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', marginBottom: '6px'
                 }}
               />
               
