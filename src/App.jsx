@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import AdminPanel from './AdminPanel'
 import RaidGame from './RaidGame'
+import GambleBoard from './GambleBoard'
 
 const RAKKO_MASTER_IMAGE = '/rakko.png'
 
@@ -207,6 +208,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home')
   const isMobile = useIsMobile()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [communityView, setCommunityView] = useState('board') // board(게시판) | gamble(도박장)
 
   const [teams, setTeams] = useState([])
   const [allProfiles, setAllProfiles] = useState([])
@@ -931,6 +933,27 @@ export default function App() {
     )
   }
 
+  // 💬 커뮤니티 상단 전환 버튼 (게시판 / 도박장)
+  const communityToggle = (
+    <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+      {[['board', '📝 게시판', '#3b82f6'], ['gamble', '🎲 도박장', '#ea580c']].map(([id, label, color]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setCommunityView(id)}
+          style={{
+            flex: 1, padding: '9px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer',
+            border: communityView === id ? `2px solid ${color}` : '1px solid #e2e8f0',
+            background: communityView === id ? `${color}14` : '#fff',
+            color: communityView === id ? color : '#64748b',
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: isMobile ? '12px 10px' : '20px 16px' }}>
       <style>{`
@@ -1329,13 +1352,14 @@ export default function App() {
       {/* ========================================================= */}
       {/* 📄 [PAGE 3] 팀 커뮤니티 */}
       {/* ========================================================= */}
-      {activeTab === 'community' && (
+      {activeTab === 'community' && communityView === 'board' && (
         <section className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <MessageSquare color="#3b82f6" size={20} /> 💬 제자 마을 팀 커뮤니티
             </h2>
           </div>
+          {communityToggle}
 
           <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '14px' }}>
             <button
@@ -1617,6 +1641,41 @@ export default function App() {
             )}
           </div>
         </section>
+      )}
+
+      {/* ========================================================= */}
+      {/* 🎲 [PAGE 3-B] 커뮤니티 > 도박장 (PvE 혼자 하기 + PvP 종족 대결) */}
+      {/* ========================================================= */}
+      {activeTab === 'community' && communityView === 'gamble' && (
+        <>
+          <section className="card" style={{ marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MessageSquare color="#3b82f6" size={20} /> 💬 제자 마을 팀 커뮤니티
+              </h2>
+            </div>
+            {communityToggle}
+          </section>
+          <GambleBoard
+            supabase={supabase}
+            session={session}
+            teamConfig={TEAM_CONFIG}
+            isMobile={isMobile}
+            onChanged={async () => {
+              fetchTeamScores()
+              fetchUserProfiles()
+              if (session) {
+                const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
+                const { data } = await supabase
+                  .from('user_profiles')
+                  .select('points')
+                  .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
+                  .maybeSingle()
+                if (data) setUserPoints(data.points || 0)
+              }
+            }}
+          />
+        </>
       )}
 
       {/* ========================================================= */}
