@@ -151,6 +151,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
   }, [])
 
   // ---------------- 실시간 구독 ----------------
+ // ---------------- 실시간 구독 ----------------
   useEffect(() => {
     if (!session) return undefined
     const channel = supabase
@@ -179,10 +180,16 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         if (row.status === 'defeated' && cur.status !== 'defeated') { spawnDefeat(); refreshSoon() }
         setState((prev) => prev && ({ ...prev, hp: row.hp, status: row.status }))
       })
+      // 🔄 보스 리셋(DELETE) 감지 시 자동으로 화면 상태 재로드 추가
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'raid_days' }, () => {
+        loadState()
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'raid_attacks' }, () => {
+        loadState()
+      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [session, supabase, spawnHit, spawnDefeat, refreshSoon])
-
+  }, [session, supabase, spawnHit, spawnDefeat, refreshSoon, loadState])
   // ---------------- 캔버스 루프 ----------------
   useEffect(() => {
     const canvas = canvasRef.current
