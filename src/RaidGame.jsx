@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Swords, Users, Trophy, ScrollText } from 'lucide-react'
 
-// 🐉 종족 보스 레이드
-// - 데미지/크리티컬/공격권/보상은 전부 서버(DB 함수 raid_attack)가 계산합니다. 화면은 결과를 연출만 해요.
-// - 다른 사람의 공격은 Supabase Realtime 으로 받아서 실시간으로 보여줍니다.
+// 🐉 종족 합동 보스 레이드
+// - 데미지/크리티컬/공격권/팀 참여 보너스/막타 보너스는 전부 서버(DB 함수 raid_attack)가 계산합니다.
+// - 다른 사람의 공격은 Supabase Realtime으로 받아서 실시간으로 보여줍니다.
 
 const SKILLS = [
   { id: 'basic', name: '일반 공격', cost: 1, mult: '×1.0', crit: '10%', emoji: '⚔️', color: '#2563eb' },
@@ -36,9 +36,9 @@ const reasonText = (res) => {
 // 🔊 효과음 재생 함수 (public/sounds/ 경로의 MP3 재생)
 const playSfx = (type) => {
   const sfxMap = {
-    hit: '/sounds/hit.wav',
-    crit: '/sounds/crit.wav',
-    defeat: '/sounds/defeat.wav',
+    hit: '/sounds/hit.mp3',
+    crit: '/sounds/crit.mp3',
+    defeat: '/sounds/defeat.mp3',
   }
   const url = sfxMap[type]
   if (!url) return
@@ -94,13 +94,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     refreshTimer.current = setTimeout(() => { loadState() }, 1200)
   }, [loadState])
 
-  useEffect(() => {
-    if (!session) return undefined
-    loadState()
-    const interval = setInterval(loadState, 30000) // 실시간 연결이 끊겨도 30초마다 보정
-    return () => { clearInterval(interval); if (refreshTimer.current) clearTimeout(refreshTimer.current) }
-  }, [session, loadState])
-
   // ---------------- 연출 ----------------
   const spawnHit = useCallback((damage, crit, mine) => {
     // 🔊 효과음 재생
@@ -150,9 +143,15 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     s.flash = 1
   }, [])
 
-// ---------------- 실시간 구독 ----------------
+  // ---------------- 실시간 구독 ----------------
   useEffect(() => {
     if (!session) return undefined
+    loadState()
+
+    // 🔄 화면 포커스 회복 시 자동 갱신
+    const onFocus = () => loadState()
+    window.addEventListener('focus', onFocus)
+
     const channel = supabase
       .channel('raid-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'raid_attacks' }, (payload) => {
@@ -179,7 +178,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         if (row.status === 'defeated' && cur.status !== 'defeated') { spawnDefeat(); refreshSoon() }
         setState((prev) => prev && ({ ...prev, hp: row.hp, status: row.status }))
       })
-      // 🔄 보스 리셋(DELETE) 감지 시 자동으로 화면 상태 재로드 추가
+      // 🔄 보스 리셋(DELETE) 실시간 감지
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'raid_days' }, () => {
         loadState()
       })
@@ -187,9 +186,16 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         loadState()
       })
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+
+    const interval = setInterval(loadState, 30000)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      supabase.removeChannel(channel)
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    }
   }, [session, supabase, spawnHit, spawnDefeat, refreshSoon, loadState])
-  
+
   // ---------------- 캔버스 루프 ----------------
   useEffect(() => {
     const canvas = canvasRef.current
@@ -437,10 +443,20 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
           my_damage: (prev.me.my_damage || 0) + data.damage,
         },
       }))
-      setMessage(
-        `${data.crit ? '💥 크리티컬! ' : ''}${SKILL_NAME[skill.id]}으로 ${fmt(data.damage)} 데미지!` +
-        (data.leveled_up ? ` 🎉 레벨 업! Lv.${data.level}` : '')
-      )
+
+      // 💬 결과 안내 문구 조합
+      let msg = `${data.crit ? '💥 크리티컬! ' : ''}${SKILL_NAME[skill.id]}으로 ${fmt(data.damage)} 데미지!`
+      if (data.team_bonus_added > 0) {
+        msg += ` (🏰 팀 첫 참여 보너스 +300pt!)`
+      }
+      if (data.is_last_hit) {
+        msg += ` ⚡ 보스 막타 성공! (+200pt 보너스)`
+      }
+      if (data.leveled_up) {
+        msg += ` 🎉 레벨 업! Lv.${data.level}`
+      }
+      setMessage(msg)
+
       if (data.defeated) { spawnDefeat(); if (onChanged) onChanged() }
       refreshSoon()
     } finally {
@@ -483,7 +499,22 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
             {state ? `오늘의 보스 · ${state.boss.emoji} ${state.boss.name}` : '모든 종족이 힘을 합쳐 매일 나타나는 보스를 쓰러뜨려요!'}
           </p>
         </div>
-        {statusBadge}
+
+        {/* 🔄 수동 새로고침 버튼 & 상태 태그 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            onClick={loadState}
+            style={{
+              padding: '4px 8px', borderRadius: '8px', border: '1px solid #ddd6fe',
+              background: '#fff', color: '#6d28d9', fontSize: '11px', fontWeight: '700',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px'
+            }}
+          >
+            🔄 새로고침
+          </button>
+          {statusBadge}
+        </div>
       </div>
 
       {!session ? (
@@ -579,16 +610,17 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px', marginTop: '10px' }}>
               <div style={card}>
                 <div style={{ fontSize: '12px', fontWeight: '800', color: '#334155', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Users size={13} /> 종족별 피해
+                  <Users size={13} /> 종족별 피해 & 오늘 레이드 점수
                 </div>
                 {(state.team_damage || []).length === 0 ? (
                   <div style={{ fontSize: '12px', color: '#94a3b8' }}>아직 공격이 없어요.</div>
                 ) : state.team_damage.map((t) => (
                   <div key={t.team_id} style={{ marginBottom: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                      <span>{teamConfig[t.team_id]?.name || t.team_id}</span><span>{fmt(t.damage)}</span>
+                      <span>{teamConfig[t.team_id]?.name || t.team_id}</span>
+                      <span>{fmt(t.damage)} 피해 <b style={{ color: '#d97706', marginLeft: '4px' }}>(+{fmt(t.raid_points)}pt · {t.participants}명)</b></span>
                     </div>
-                    <div style={{ height: '6px', borderRadius: '4px', background: '#f1f5f9', overflow: 'hidden' }}>
+                    <div style={{ height: '6px', borderRadius: '4px', background: '#f1f5f9', overflow: 'hidden', marginTop: '2px' }}>
                       <div style={{ width: `${(Number(t.damage) / maxTeamDmg) * 100}%`, height: '100%', background: teamColor(t.team_id), transition: 'width .5s' }} />
                     </div>
                   </div>
@@ -632,7 +664,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
           )}
 
           <p style={{ margin: '10px 2px 0', fontSize: '11px', color: '#8b5cf6' }}>
-            매일 자정(한국 시간)에 새 보스가 나타나고 공격권이 5장으로 충전돼요. 못 잡은 보스는 도망쳐요. 공격할수록 경험치가 쌓여 레벨이 오르고 기본 공격력이 강해져요.
+            매일 자정(한국 시간)에 새 보스가 나타나고 공격권이 5장으로 충전돼요. 첫 공격 시 소속 종족에 +300pt가 추가됩니다.
           </p>
         </>
       )}
