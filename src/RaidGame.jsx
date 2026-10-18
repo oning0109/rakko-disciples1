@@ -94,11 +94,9 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     refreshTimer.current = setTimeout(() => { loadState() }, 1200)
   }, [loadState])
 
-  // ---------------- 연출 ----------------
+  // ---------------- 연출 (공통: 다른 유저 포함 데미지 숫자/이펙트) ----------------
   const spawnHit = useCallback((damage, crit, mine) => {
-    // 🔊 효과음 재생
-    playSfx(crit ? 'crit' : 'hit')
-
+    // 💡 변경점: 여기 있던 playSfx를 제거하여, 다른 유저가 칠 때는 소리가 안 나게 함!
     const s = sceneRef.current
     const cx = s.w / 2
     const cy = s.h * 0.5
@@ -125,7 +123,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
   }, [])
 
   const spawnDefeat = useCallback(() => {
-    // 🔊 효과음 재생
     playSfx('defeat')
 
     const s = sceneRef.current
@@ -148,7 +145,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     if (!session) return undefined
     loadState()
 
-    // 🔄 화면 포커스 회복 시 자동 갱신
     const onFocus = () => loadState()
     window.addEventListener('focus', onFocus)
 
@@ -159,6 +155,8 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         const cur = stateRef.current
         if (!cur || String(row.day) !== String(cur.day)) return
         if (row.user_id === cur.me?.user_id) return // 내 공격은 이미 화면에 반영됨
+        
+        // 다른 유저의 공격이 들어올 때는 소리 없이 이펙트만 표시
         spawnHit(row.damage, row.crit, false)
         setState((prev) => prev && ({
           ...prev,
@@ -178,7 +176,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         if (row.status === 'defeated' && cur.status !== 'defeated') { spawnDefeat(); refreshSoon() }
         setState((prev) => prev && ({ ...prev, hp: row.hp, status: row.status }))
       })
-      // 🔄 보스 리셋(DELETE) 실시간 감지
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'raid_days' }, () => {
         loadState()
       })
@@ -187,7 +184,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       })
       .subscribe()
 
-    // 실시간(Realtime)이 기본이고, 연결이 끊겨도 60초마다 보정. 화면이 숨겨져 있으면(다른 탭/앱) 요청하지 않아 로그를 아낀다.
     const interval = setInterval(() => { if (!document.hidden) loadState() }, 60000)
     return () => {
       clearInterval(interval)
@@ -245,7 +241,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       const color = st?.boss?.color || '#7c3aed'
       const { w, h } = s
 
-      // 체력 보간
       s.hpDisplay += (s.hpTarget - s.hpDisplay) * (1 - Math.exp(-7 * dt))
       s.shake = Math.max(0, s.shake - dt * 4.5)
       s.flash = Math.max(0, s.flash - dt * 3.2)
@@ -253,7 +248,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
 
       ctx.clearRect(0, 0, w, h)
 
-      // 배경
       const bg = ctx.createLinearGradient(0, 0, 0, h)
       bg.addColorStop(0, '#0b1020')
       bg.addColorStop(1, '#1b2442')
@@ -264,7 +258,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       roundRect(0, 0, w, h, 16)
       ctx.clip()
 
-      // 별
       s.stars.forEach((star) => {
         ctx.globalAlpha = 0.35 + 0.35 * Math.sin(s.t * 1.6 + star.p)
         ctx.fillStyle = '#e2e8f0'
@@ -274,7 +267,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       })
       ctx.globalAlpha = 1
 
-      // 보스 오라
       const cx = w / 2
       const cy = h * 0.52
       const size = Math.min(w, h) * 0.52
@@ -284,13 +276,11 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       ctx.fillStyle = aura
       ctx.fillRect(0, 0, w, h)
 
-      // 바닥 그림자
       ctx.fillStyle = 'rgba(0,0,0,0.35)'
       ctx.beginPath()
       ctx.ellipse(cx, h * 0.86, size * 0.55, size * 0.1, 0, 0, Math.PI * 2)
       ctx.fill()
 
-      // 보스
       const gone = s.defeated
       const fall = gone ? Math.min(1, s.defeatT / 1.2) : 0
       const breathe = gone ? 1 : 1 + Math.sin(s.t * 2.2) * 0.035
@@ -314,7 +304,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       ctx.restore()
       ctx.globalAlpha = 1
 
-      // 피격 플래시
       if (s.flash > 0) {
         ctx.globalCompositeOperation = 'lighter'
         const fl = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.8)
@@ -325,7 +314,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         ctx.globalCompositeOperation = 'source-over'
       }
 
-      // 파티클
       for (let i = s.particles.length - 1; i >= 0; i--) {
         const p = s.particles[i]
         p.life -= dt * 1.4
@@ -341,7 +329,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       }
       ctx.globalAlpha = 1
 
-      // 데미지 숫자
       for (let i = s.floaters.length - 1; i >= 0; i--) {
         const f = s.floaters[i]
         f.life -= dt * 0.85
@@ -365,7 +352,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       }
       ctx.globalAlpha = 1
 
-      // HP 바
       const barX = 14
       const barY = 14
       const barW = w - 28
@@ -393,7 +379,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       const hpNow = st ? Math.round(s.hpDisplay * st.max_hp) : 0
       ctx.fillText(st ? `HP ${fmt(hpNow)} / ${fmt(st.max_hp)}` : 'HP', w / 2, barY + barH / 2 + 1)
 
-      // 상태 문구
       if (st?.status === 'defeated' && s.defeatT > 0.6) {
         ctx.globalAlpha = Math.min(1, (s.defeatT - 0.6) * 1.5)
         ctx.font = '900 34px "Pretendard","Noto Sans KR",Arial,sans-serif'
@@ -416,7 +401,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     return () => { cancelAnimationFrame(raf); if (ro) ro.disconnect() }
   }, [isMobile, session])
 
-  // ---------------- 공격 ----------------
+  // ---------------- 공격 (내 화면에서 내가 누를 때만 소리 재생) ----------------
   const attack = async (skill) => {
     if (busy || !state?.me) return
     setBusy(true)
@@ -429,6 +414,10 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         if (data?.reason === 'defeated' || data?.reason === 'boss_gone') loadState()
         return
       }
+
+      // 🔊 [핵심] 내가 직접 공격 버튼을 눌러 성공했을 때만 타격음/크리티컬음 재생!
+      playSfx(data.crit ? 'crit' : 'hit')
+
       spawnHit(data.damage, data.crit, true)
       sceneRef.current.hpTarget = data.max_hp > 0 ? data.hp / data.max_hp : 0
       setState((prev) => prev && ({
@@ -445,7 +434,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
         },
       }))
 
-      // 💬 결과 안내 문구 조합
       let msg = `${data.crit ? '💥 크리티컬! ' : ''}${SKILL_NAME[skill.id]}으로 ${fmt(data.damage)} 데미지!`
       if (data.team_bonus_added > 0) {
         msg += ` (🏰 팀 첫 참여 보너스 +300pt!)`
@@ -501,7 +489,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
           </p>
         </div>
 
-        {/* 🔄 수동 새로고침 버튼 & 상태 태그 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button
             type="button"
@@ -538,7 +525,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
             <p style={{ margin: '8px 2px 0', fontSize: '12px', color: '#6d28d9' }}>📜 {state.boss.description}</p>
           )}
 
-          {/* 내 정보 */}
           {me ? (
             <div style={{ ...card, marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
@@ -593,7 +579,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
             </div>
           )}
 
-          {/* 토벌 결과 */}
           {state?.status === 'defeated' && rewards && (
             <div style={{ ...card, marginTop: '10px', background: '#f0fdf4', borderColor: '#bbf7d0' }}>
               <div style={{ fontSize: '14px', fontWeight: '900', color: '#15803d', marginBottom: '6px' }}>🏆 오늘의 보스를 쓰러뜨렸어요!</div>
@@ -606,7 +591,6 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
             </div>
           )}
 
-          {/* 순위 / 로그 */}
           {state && (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px', marginTop: '10px' }}>
               <div style={card}>
