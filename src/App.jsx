@@ -19,7 +19,7 @@ const TEAM_CONFIG = {
   hachiware: { name: '하치와레', image: '/hachiware.png' },
   usagi: { name: '우사기', image: '/usagi.png' },
   momonga: { name: '모몽가', image: '/momonga.png' },
-  kurimanju: { name: '크리만쥬', image: '/kurimanju.png' },
+  kurimanju: { name: '쿠리만쥬', image: '/kurimanju.png' },
   shisa: { name: '시사', image: '/shisa.png' },
 }
 
