@@ -60,7 +60,7 @@ const numOrUndefined = (v) => {
   return Number.isFinite(n) ? Math.trunc(n) : undefined
 }
 
-export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChanged }) {
+export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChanged, pendingWithdrawCount = 0 }) {
   const [tab, setTab] = useState('schedules')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
@@ -96,7 +96,7 @@ export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChang
         {notice && <span style={{ ...chip('#dcfce7', '#166534'), fontSize: '12px', padding: '4px 10px' }}>✅ {notice}</span>}
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingBottom: '8px', marginBottom: '8px' }}>
         {SUB_TABS.map((t) => (
           <button
             key={t.id}
@@ -111,6 +111,11 @@ export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChang
             }}
           >
             {t.label}
+            {t.id === 'chips' && pendingWithdrawCount > 0 && (
+              <span style={{ marginLeft: '6px', background: '#dc2626', color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '800' }}>
+                {pendingWithdrawCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
