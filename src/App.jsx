@@ -208,6 +208,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home')
   const isMobile = useIsMobile()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [pendingWithdrawCount, setPendingWithdrawCount] = useState(0) // 처리 대기 중인 칩 출금 신청 수 (관리자에게만 표시)
   const [communityView, setCommunityView] = useState('board') // board(게시판) | gamble(도박장)
 
   const [teams, setTeams] = useState([])
@@ -279,6 +280,16 @@ export default function App() {
   useEffect(() => {
     if (!isAdmin && activeTab === 'admin') setActiveTab('home')
   }, [isAdmin, activeTab])
+
+  // 🛡️ 관리자: 처리 대기 중인 출금 신청 수 (관리자 탭 버튼에 빨간 배지로 표시)
+  const fetchPendingWithdrawCount = async () => {
+    const { data, error } = await supabase.rpc('admin_list_withdrawals', { p_status: 'pending' })
+    if (!error && Array.isArray(data)) setPendingWithdrawCount(data.length)
+  }
+  useEffect(() => {
+    if (isAdmin) fetchPendingWithdrawCount()
+    else setPendingWithdrawCount(0)
+  }, [isAdmin])
 
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -1062,6 +1073,11 @@ export default function App() {
             }}
           >
             <Shield size={16} /> 관리자
+            {pendingWithdrawCount > 0 && (
+              <span style={{ background: '#dc2626', color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '800' }}>
+                {pendingWithdrawCount}
+              </span>
+            )}
           </button>
         )}
       </nav>
@@ -1792,12 +1808,14 @@ export default function App() {
           supabase={supabase}
           teamConfig={TEAM_CONFIG}
           isMobile={isMobile}
+          pendingWithdrawCount={pendingWithdrawCount}
           onDataChanged={() => {
             fetchSchedules()
             fetchTeamScores()
             fetchTodayRaidStats()
             fetchUserProfiles()
             fetchPosts()
+            fetchPendingWithdrawCount()
           }}
         />
       )}
