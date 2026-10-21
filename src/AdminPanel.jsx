@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, Trash2, Pencil, Save, X, RefreshCw, Search, Swords } from 'lucide-react'
+import { Shield, Trash2, Pencil, Save, X, RefreshCw, Search } from 'lucide-react'
 
 // 🛡️ 관리자 페이지
+// - 화면에서는 관리자 탭을 숨기지만, 실제 권한 검사는 DB 함수(admin_*)가 서버에서 다시 수행합니다.
+// - 모든 변경은 admin_logs 에 기록됩니다.
+
 const SCHEDULE_CATEGORIES = ['발로란트', '오버워치', '종합게임', '술캠', '공구', '기타']
 
+// 🎖️ 발로란트/롤 티어 → MMR 기준표 (오버워치는 숫자를 직접 입력)
 const RANK_TIERS = [
   ['아이언', 100], ['브론즈', 200], ['실버', 300], ['골드', 400],
   ['플래티넘', 500], ['에메랄드', 550], ['다이아몬드', 600], ['초월자', 650],
@@ -11,12 +15,13 @@ const RANK_TIERS = [
 ]
 const KEEP_CURRENT = '__keep__'
 
+// 🎂 생일(MM-DD) 헬퍼 — DB 에는 'MM-DD' 형식으로 저장 (예전 'MM/DD' 값도 읽을 수 있게 처리)
 const parseBirthday = (b) => {
   const m = String(b || '').match(/(\d{1,2})[-/.](\d{1,2})/)
   return m ? { m: String(Number(m[1])), d: String(Number(m[2])) } : { m: '', d: '' }
 }
 const formatBirthday = (m, d) => `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-const daysInMonth = (m) => new Date(2000, Number(m), 0).getDate()
+const daysInMonth = (m) => new Date(2000, Number(m), 0).getDate() // 2000년은 윤년 → 2월 29일 허용
 const tierLabel = (mmr) => {
   if (mmr === null || mmr === undefined) return '미설정'
   const hit = RANK_TIERS.find(([, v]) => v === mmr)
@@ -27,7 +32,7 @@ const SUB_TABS = [
   { id: 'schedules', label: '📅 일정' },
   { id: 'users', label: '👤 제자' },
   { id: 'teams', label: '🏰 종족' },
-  { id: 'raid', label: '🐉 레이드' },
+  { id: 'chips', label: '💰 칩/출금' },
   { id: 'posts', label: '📝 게시글' },
   { id: 'logs', label: '📜 기록' },
 ]
@@ -65,6 +70,7 @@ export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChang
     setTimeout(() => setNotice(''), 3500)
   }
 
+  // 공통 RPC 호출: 실패하면 메시지를 보여주고 false, 성공하면 true 반환
   const callRpc = async (fn, args, okMsg) => {
     setBusy(true)
     try {
@@ -112,70 +118,10 @@ export default function AdminPanel({ supabase, teamConfig, isMobile, onDataChang
       {tab === 'schedules' && <SchedulesTab supabase={supabase} callRpc={callRpc} busy={busy} isMobile={isMobile} />}
       {tab === 'users' && <UsersTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} isMobile={isMobile} />}
       {tab === 'teams' && <TeamsTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} />}
-      {tab === 'raid' && <RaidTab supabase={supabase} callRpc={callRpc} busy={busy} />}
+      {tab === 'chips' && <ChipsTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} isMobile={isMobile} />}
       {tab === 'posts' && <PostsTab supabase={supabase} callRpc={callRpc} busy={busy} teamConfig={teamConfig} />}
       {tab === 'logs' && <LogsTab supabase={supabase} />}
     </section>
-  )
-}
-
-// ---------------------------------------------------------------
-// 🐉 레이드 보스 관리
-// ---------------------------------------------------------------
-function RaidTab({ supabase, callRpc, busy }) {
-  const [bossState, setBossState] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  const loadBossState = useCallback(async () => {
-    setLoading(true)
-    const { data } = await supabase.rpc('raid_get_state')
-    setBossState(data)
-    setLoading(false)
-  }, [supabase])
-
-  useEffect(() => { loadBossState() }, [loadBossState])
-
-  const handleResetBoss = async () => {
-    if (!window.confirm('오늘의 보스와 누적 데미지 기록을 초기화하고 새 보스를 생성할까요?')) return
-    const res = await callRpc('admin_reset_raid_boss', {}, '오늘의 보스를 성공적으로 초기화했습니다!')
-    if (res.ok) loadBossState()
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={card}>
-        <h3 style={{ margin: '0 0 8px', fontSize: '15px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Swords size={16} color="#7c3aed" /> 오늘 진행 중인 보스 정보
-        </h3>
-        {loading ? (
-          <p style={{ fontSize: '13px', color: '#94a3b8' }}>불러오는 중...</p>
-        ) : bossState ? (
-          <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>
-            <div>보스 이름: <b>{bossState.boss?.emoji} {bossState.boss?.name}</b></div>
-            <div>현재 체력: <b>{bossState.hp?.toLocaleString()} / {bossState.max_hp?.toLocaleString()}</b></div>
-            <div>상태: <b style={{ color: bossState.status === 'defeated' ? '#16a34a' : '#dc2626' }}>
-              {bossState.status === 'defeated' ? '🏆 토벌 완료' : '🔥 전투 중'}
-            </b></div>
-          </div>
-        ) : (
-          <p style={{ fontSize: '13px', color: '#94a3b8' }}>보스 정보를 불러오지 못했습니다.</p>
-        )}
-
-        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #e2e8f0' }}>
-          <button
-            type="button"
-            onClick={handleResetBoss}
-            disabled={busy}
-            style={btn('#dc2626')}
-          >
-            <RefreshCw size={13} /> 오늘 보스 강제 초기화 / 새 보스 생성
-          </button>
-          <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>
-            ※ 초기화 시 오늘의 보스가 리셋되며, 랜덤으로 새 보스가 등장합니다.
-          </p>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -321,12 +267,13 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
   const save = async (orig) => {
     const args = { p_user_id: orig.user_id }
     const pts = numOrUndefined(form.points); if (pts !== undefined && pts !== (orig.points ?? 0)) args.p_points = pts
-    if ((form.team_id || '') !== (orig.team_id || '')) args.p_team_id = form.team_id
+    if ((form.team_id || '') !== (orig.team_id || '')) args.p_team_id = form.team_id // '' = 종족 없음
     const map = { val_mmr: 'p_val_mmr', lol_mmr: 'p_lol_mmr', tank_mmr: 'p_tank_mmr', deal_mmr: 'p_deal_mmr', heal_mmr: 'p_heal_mmr' }
     Object.entries(map).forEach(([k, p]) => {
       const v = numOrUndefined(form[k])
       if (v !== undefined && v !== orig[k]) args[p] = v
     })
+    // 🎂 생일: 월/일을 모두 고르면 저장, 둘 다 비우면 삭제 ('' 전달 = 삭제, 미전달 = 변경 없음)
     if (form.bday_m && !form.bday_d) { alert('생일의 일(日)도 선택해주세요.'); return }
     const newB = form.bday_m && form.bday_d ? formatBirthday(form.bday_m, form.bday_d) : ''
     const ob = parseBirthday(orig.birthday)
@@ -349,6 +296,7 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     </label>
   )
 
+  // 발로란트/롤: 티어 드롭다운 (선택한 티어의 MMR 값으로 저장). 기준표에 없는 기존 값은 '현재 값 유지'로 보존
   const tierField = (label, key, orig) => {
     const current = numOrUndefined(form[key])
     const matched = RANK_TIERS.find(([, v]) => v === current)
@@ -649,6 +597,196 @@ function LogsTab({ supabase }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------
+// 💰 칩 / 출금 / 베팅 관리
+// ---------------------------------------------------------------
+const fmtN = (n) => Number(n || 0).toLocaleString()
+const fmtTime = (epoch) => (epoch
+  ? new Date(epoch * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : '-')
+
+function ChipsTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
+  const [pending, setPending] = useState([])
+  const [history, setHistory] = useState([])
+  const [markets, setMarkets] = useState([])
+  const [wallets, setWallets] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [p, paid, rej, m, w] = await Promise.all([
+      supabase.rpc('admin_list_withdrawals', { p_status: 'pending' }),
+      supabase.rpc('admin_list_withdrawals', { p_status: 'paid' }),
+      supabase.rpc('admin_list_withdrawals', { p_status: 'rejected' }),
+      supabase.rpc('admin_list_bet_markets', { p_status: 'open' }),
+      supabase.rpc('admin_list_chip_wallets', { p_limit: 30 }),
+    ])
+    const err = p.error || paid.error || rej.error || m.error || w.error
+    setError(err ? err.message : '')
+    setPending([...(p.data || [])].sort((a, b) => a.id - b.id)) // 오래된 요청부터
+    setHistory([...(paid.data || []), ...(rej.data || [])].sort((a, b) => b.id - a.id).slice(0, 20))
+    setMarkets(m.data || [])
+    setWallets(w.data || [])
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => { load() }, [load])
+
+  const copy = async (key, text) => {
+    try {
+      await navigator.clipboard.writeText(String(text))
+      setCopied(key)
+      setTimeout(() => setCopied(''), 1500)
+    } catch (e) {
+      window.prompt('복사해서 사용하세요', String(text))
+    }
+  }
+
+  const markPaid = async (w) => {
+    const name = w.username || w.discord_id
+    const ok = window.confirm(
+      `LeaderBoard 에서 /경험치추가 로 ${name} 님에게 경험치 ${fmtN(w.amount)} 를 이미 지급하셨나요?\n\n[확인]을 누르면 '지급 완료'로 처리되고 되돌릴 수 없어요.`
+    )
+    if (!ok) return
+    const res = await callRpc('admin_handle_withdrawal', { p_id: w.id, p_action: 'paid', p_note: null }, `#${w.id} 지급 완료로 처리했습니다.`)
+    if (res.ok) load()
+  }
+
+  const reject = async (w) => {
+    const note = window.prompt(`#${w.id} 출금 신청을 거절하고 칩 ${fmtN(w.amount)} 를 환불해요.\n거절 사유(선택):`, '')
+    if (note === null) return
+    const res = await callRpc('admin_handle_withdrawal', { p_id: w.id, p_action: 'rejected', p_note: note || null }, `#${w.id} 거절하고 칩을 환불했습니다.`)
+    if (res.ok) load()
+  }
+
+  const cancelMarket = async (m) => {
+    if (!window.confirm(`경기 #${m.id} 의 모든 베팅(${m.bettors}명)을 취소하고 칩을 환불할까요?`)) return
+    const res = await callRpc('admin_cancel_bet_market', { p_id: m.id }, `경기 #${m.id} 베팅을 환불했습니다.`)
+    if (res.ok) load()
+  }
+
+  const settleMarket = async (m, winner) => {
+    if (!window.confirm(`경기 #${m.id} 를 ${winner} 팀 승리로 정산할까요? (적중자 지급 / 실패자 칩 소멸, 되돌릴 수 없어요)`)) return
+    const res = await callRpc('admin_settle_bet_market', { p_id: m.id, p_winner: winner }, `경기 #${m.id} 를 ${winner} 팀 승리로 정산했습니다.`)
+    if (res.ok) load()
+  }
+
+  const adjust = async (w) => {
+    const raw = window.prompt(`${w.username || w.discord_id} 님의 칩을 얼마나 늘리거나 줄일까요?\n(예: 1000 또는 -500)  현재 ${fmtN(w.balance)}칩`, '')
+    if (raw === null || raw.trim() === '') return
+    const delta = Math.trunc(Number(raw.replace(/,/g, '')))
+    if (!Number.isFinite(delta) || delta === 0) { alert('0이 아닌 숫자를 입력해 주세요.'); return }
+    const note = window.prompt('사유 (기록에 남아요):', '') 
+    if (note === null) return
+    const res = await callRpc('admin_adjust_chips', { p_discord_id: w.discord_id, p_delta: delta, p_note: note || null }, `${w.username || w.discord_id} 님 칩을 ${delta > 0 ? '+' : ''}${fmtN(delta)} 조정했습니다.`)
+    if (res.ok) load()
+  }
+
+  const pendingTotal = pending.reduce((a, b) => a + Number(b.amount), 0)
+  const copyBtn = (key, text, label) => (
+    <button type="button" onClick={() => copy(key, text)} style={{ ...btn('#fff', '#475569', '1px solid #cbd5e1'), padding: '4px 8px', fontSize: '11px' }}>
+      {copied === key ? '✅ 복사됨' : label}
+    </button>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="button" onClick={load} style={btn('#fff', '#475569', '1px solid #cbd5e1')}><RefreshCw size={13} /> 새로고침</button>
+        {error && <span style={{ fontSize: '12px', color: '#b91c1c' }}>불러오지 못했어요: {error}</span>}
+      </div>
+
+      {/* 출금 요청 */}
+      <div style={{ ...card, marginBottom: '12px', borderColor: pending.length > 0 ? '#fecaca' : '#e2e8f0' }}>
+        <div style={{ fontSize: '14px', fontWeight: '900', color: '#b91c1c', marginBottom: '4px' }}>
+          📤 처리 대기 중인 출금 신청 ({pending.length}건 · 합계 {fmtN(pendingTotal)})
+        </div>
+        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', lineHeight: 1.5 }}>
+          순서: ① LeaderBoard 에서 <b>/경험치추가</b> 로 해당 유저에게 경험치를 지급 → ② 여기서 <b>지급 완료</b> 클릭. 지급할 수 없으면 <b>거절</b>을 누르면 칩이 환불돼요.
+        </div>
+        {loading ? <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>불러오는 중...</p> : pending.length === 0 ? (
+          <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>처리할 출금 신청이 없어요 🎉</p>
+        ) : pending.map((w) => (
+          <div key={w.id} style={{ padding: '10px 0', borderTop: '1px dashed #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>
+                  #{w.id} · {w.username || '(이름 없음)'} <span style={{ color: '#b91c1c' }}>{fmtN(w.amount)}칩</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                  신청 {fmtTime(w.requested_at)} · 디스코드 ID {w.discord_id}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {copyBtn(`id-${w.id}`, w.discord_id, 'ID 복사')}
+                {copyBtn(`amt-${w.id}`, w.amount, '금액 복사')}
+                <button type="button" onClick={() => markPaid(w)} disabled={busy} style={btn('#16a34a')}>✅ 지급 완료</button>
+                <button type="button" onClick={() => reject(w)} disabled={busy} style={btn('#fef2f2', '#dc2626', '1px solid #fecdd3')}>거절(환불)</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 진행 중 베팅 경기 */}
+      <div style={{ ...card, marginBottom: '12px' }}>
+        <div style={{ fontSize: '14px', fontWeight: '900', color: '#334155', marginBottom: '4px' }}>🎰 진행 중인 베팅 경기 ({markets.length})</div>
+        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>정상적으로는 방장이 결과를 입력하면 자동 정산돼요. 결과 입력이 누락됐을 때만 여기서 직접 정산/취소하세요.</div>
+        {markets.length === 0 ? <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>진행 중인 경기가 없어요.</p> : markets.map((m) => (
+          <div key={m.id} style={{ padding: '8px 0', borderTop: '1px dashed #e2e8f0' }}>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a' }}>#{m.id} · {m.game} · 베팅 {m.bettors}명</div>
+            <div style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 6px', lineHeight: 1.5 }}>
+              🔵 A ({(m.team_a || []).map((x) => x.name).join(', ') || '-'}) ×{m.mult_a} · 총 {fmtN(m.total_a)}칩<br />
+              🔴 B ({(m.team_b || []).map((x) => x.name).join(', ') || '-'}) ×{m.mult_b} · 총 {fmtN(m.total_b)}칩<br />
+              베팅 마감 {fmtTime(m.closes_at)}
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => settleMarket(m, 'A')} disabled={busy} style={btn('#2563eb')}>A팀 승리 정산</button>
+              <button type="button" onClick={() => settleMarket(m, 'B')} disabled={busy} style={btn('#dc2626')}>B팀 승리 정산</button>
+              <button type="button" onClick={() => cancelMarket(m)} disabled={busy} style={btn('#fff', '#475569', '1px solid #cbd5e1')}>취소(전액 환불)</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 칩 지갑 */}
+      <div style={{ ...card, marginBottom: '12px' }}>
+        <div style={{ fontSize: '14px', fontWeight: '900', color: '#334155', marginBottom: '8px' }}>👛 칩 지갑 (상위 30)</div>
+        {wallets.length === 0 ? <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>아직 지갑이 없어요.</p> : wallets.map((w) => (
+          <div key={w.discord_id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', padding: '6px 0', borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0, fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>
+              {w.username || w.discord_id}
+              <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '600', color: '#64748b' }}>충전 {fmtN(w.total_deposited)} · 출금 {fmtN(w.total_withdrawn)}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <b style={{ fontSize: '13px', color: '#b45309' }}>{fmtN(w.balance)}칩</b>
+              <button type="button" onClick={() => adjust(w)} disabled={busy} style={{ ...btn('#fff', '#475569', '1px solid #cbd5e1'), padding: '4px 8px', fontSize: '11px' }}>조정</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 처리 내역 */}
+      <div style={card}>
+        <div style={{ fontSize: '14px', fontWeight: '900', color: '#334155', marginBottom: '8px' }}>🗂️ 최근 처리한 출금 (20건)</div>
+        {history.length === 0 ? <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>아직 처리한 내역이 없어요.</p> : history.map((w) => (
+          <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '5px 0', borderTop: '1px dashed #e2e8f0', fontSize: '12px', flexWrap: 'wrap' }}>
+            <span style={{ color: '#334155' }}>
+              #{w.id} {w.username || w.discord_id} · {fmtN(w.amount)}칩
+              {w.note ? <span style={{ color: '#94a3b8' }}> ({w.note})</span> : null}
+            </span>
+            <span style={chip(w.status === 'paid' ? '#dcfce7' : '#fee2e2', w.status === 'paid' ? '#166534' : '#b91c1c')}>
+              {w.status === 'paid' ? '지급 완료' : '거절·환불'} · {fmtTime(w.handled_at)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
