@@ -10,6 +10,7 @@ import {
 import AdminPanel from './AdminPanel'
 import RaidGame from './RaidGame'
 import GambleBoard from './GambleBoard'
+import SeasonStats from './SeasonStats'
 
 const RAKKO_MASTER_IMAGE = '/rakko.png'
 
@@ -19,7 +20,7 @@ const TEAM_CONFIG = {
   hachiware: { name: '하치와레', image: '/hachiware.png' },
   usagi: { name: '우사기', image: '/usagi.png' },
   momonga: { name: '모몽가', image: '/momonga.png' },
-  kurimanju: { name: '쿠리만쥬', image: '/kurimanju.png' },
+  kurimanju: { name: '크리만쥬', image: '/kurimanju.png' },
   shisa: { name: '시사', image: '/shisa.png' },
 }
 
@@ -1085,6 +1086,11 @@ export default function App() {
       {/* ========================================================= */}
       {/* 📄 [PAGE 1] 메인 대시보드 */}
       {/* ========================================================= */}
+      {/* 🏆 월간 결산 카드/통계창 (매월 1일 0시에 지난달 점수가 기록되고 포인트가 초기화됨) */}
+      {activeTab === 'home' && (
+        <SeasonStats supabase={supabase} teamConfig={TEAM_CONFIG} isMobile={isMobile} />
+      )}
+
       {activeTab === 'home' && (
         <section className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
