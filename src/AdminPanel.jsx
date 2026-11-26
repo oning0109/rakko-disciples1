@@ -7,12 +7,29 @@ import { Shield, Trash2, Pencil, Save, X, RefreshCw, Search } from 'lucide-react
 
 const SCHEDULE_CATEGORIES = ['발로란트', '오버워치', '종합게임', '술캠', '공구', '기타']
 
-// 🎖️ 발로란트/롤 티어 → MMR 기준표 (오버워치는 숫자를 직접 입력)
+// 🎖️ 발로란트 티어 → MMR 기준표 (봇과 동일. 오버워치는 숫자를 직접 입력)
 const RANK_TIERS = [
   ['아이언', 100], ['브론즈', 200], ['실버', 300], ['골드', 400],
-  ['플래티넘', 500], ['에메랄드', 550], ['다이아몬드', 600], ['초월자', 650],
-  ['마스터', 700], ['그랜드마스터', 800], ['챌린저', 900], ['레디언트', 1000],
+  ['플래티넘', 500], ['다이아몬드', 600], ['초월자', 650], ['불멸', 800], ['레디언트', 1000],
 ]
+// 옵치 점수 → 티어 (봇과 동일: 등급 시작점 + 디비전당 100점)
+const OW_RANKS = [['브론즈', 1000], ['실버', 1500], ['골드', 2000], ['플래티넘', 2500], ['다이아', 3000], ['마스터', 3500], ['그랜드마스터', 4000], ['챔피언', 4500]]
+const owTier = (mmr) => {
+  if (mmr === null || mmr === undefined || mmr === '') return '-'
+  const v = Number(mmr) || 0
+  let [name, base] = OW_RANKS[0]
+  OW_RANKS.forEach(([n, b]) => { if (v >= b) { name = n; base = b } })
+  return `${name} ${5 - Math.min(Math.max(Math.floor((v - base) / 100), 0), 4)}`
+}
+const OW_PREF = { main: '주', sub: '부' }
+const owSummary = (r) => {
+  const p = r.ow_prefs
+  if (!p) return '옵치 미등록'
+  const parts = [['tank', '탱'], ['deal', '딜'], ['heal', '힐']]
+    .filter(([k]) => p[k] && p[k] !== 'no')
+    .map(([k, l]) => `${l}(${OW_PREF[p[k]]}) ${owTier(r[`${k}_mmr`])}`)
+  return parts.length ? parts.join(' · ') : '옵치 안 함'
+}
 const KEEP_CURRENT = '__keep__'
 
 // 🎂 생일(MM-DD) 헬퍼 — DB 에는 'MM-DD' 형식으로 저장 (예전 'MM/DD' 값도 읽을 수 있게 처리)
@@ -250,7 +267,7 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     setLoading(true)
     const { data } = await supabase
       .from('user_profiles')
-      .select('user_id, username, avatar_url, team_id, points, val_mmr, lol_mmr, tank_mmr, deal_mmr, heal_mmr, birthday')
+      .select('user_id, username, avatar_url, team_id, points, in_guild, val_tier, val_mmr, tank_mmr, deal_mmr, heal_mmr, ow_prefs, birthday')
       .order('username', { ascending: true })
     setRows(data || [])
     setLoading(false)
@@ -264,7 +281,7 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     setForm({
       bday_m: bd.m, bday_d: bd.d,
       points: r.points ?? 0, team_id: r.team_id || '',
-      val_mmr: r.val_mmr ?? '', lol_mmr: r.lol_mmr ?? '',
+      val_mmr: r.val_mmr ?? '',
       tank_mmr: r.tank_mmr ?? '', deal_mmr: r.deal_mmr ?? '', heal_mmr: r.heal_mmr ?? '',
     })
   }
@@ -273,7 +290,7 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     const args = { p_user_id: orig.user_id }
     const pts = numOrUndefined(form.points); if (pts !== undefined && pts !== (orig.points ?? 0)) args.p_points = pts
     if ((form.team_id || '') !== (orig.team_id || '')) args.p_team_id = form.team_id // '' = 종족 없음
-    const map = { val_mmr: 'p_val_mmr', lol_mmr: 'p_lol_mmr', tank_mmr: 'p_tank_mmr', deal_mmr: 'p_deal_mmr', heal_mmr: 'p_heal_mmr' }
+    const map = { val_mmr: 'p_val_mmr', tank_mmr: 'p_tank_mmr', deal_mmr: 'p_deal_mmr', heal_mmr: 'p_heal_mmr' }
     Object.entries(map).forEach(([k, p]) => {
       const v = numOrUndefined(form[k])
       if (v !== undefined && v !== orig[k]) args[p] = v
@@ -339,10 +356,13 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                   {r.avatar_url ? <img src={r.avatar_url} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%' }} /> : <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e2e8f0' }} />}
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.username}</div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.username}
+                      {r.in_guild === false && <span style={{ ...chip('#f1f5f9', '#64748b'), marginLeft: '6px' }}>서버 퇴장 (곧 삭제)</span>}
+                    </div>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>
                       {teamConfig[r.team_id]?.name || '소속 없음'} · {(r.points ?? 0).toLocaleString()}pt
-                      {' · '}발 {tierLabel(r.val_mmr)} · 롤 {tierLabel(r.lol_mmr)}
+                      {' · '}발 {r.val_tier || tierLabel(r.val_mmr)} · {owSummary(r)}
                       {(() => { const b = parseBirthday(r.birthday); return b.m && b.d ? ` · 🎂 ${formatBirthday(b.m, b.d)}` : '' })()}
                     </div>
                   </div>
@@ -395,12 +415,11 @@ function UsersTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
                   </label>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {tierField('발로란트 티어', 'val_mmr', r)}
-                    {tierField('롤 티어', 'lol_mmr', r)}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {field('옵치 탱', 'tank_mmr')}
-                    {field('옵치 딜', 'deal_mmr')}
-                    {field('옵치 힐', 'heal_mmr')}
+                    {field(`옵치 탱 (${owTier(form.tank_mmr)})`, 'tank_mmr')}
+                    {field(`옵치 딜 (${owTier(form.deal_mmr)})`, 'deal_mmr')}
+                    {field(`옵치 힐 (${owTier(form.heal_mmr)})`, 'heal_mmr')}
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button type="button" onClick={() => save(r)} disabled={busy} style={btn('#16a34a')}><Save size={13} /> 저장</button>
@@ -617,7 +636,6 @@ const fmtTime = (epoch) => (epoch
 function ChipsTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
   const [pending, setPending] = useState([])
   const [history, setHistory] = useState([])
-  const [markets, setMarkets] = useState([])
   const [wallets, setWallets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -625,18 +643,16 @@ function ChipsTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, paid, rej, m, w] = await Promise.all([
+    const [p, paid, rej, w] = await Promise.all([
       supabase.rpc('admin_list_withdrawals', { p_status: 'pending' }),
       supabase.rpc('admin_list_withdrawals', { p_status: 'paid' }),
       supabase.rpc('admin_list_withdrawals', { p_status: 'rejected' }),
-      supabase.rpc('admin_list_bet_markets', { p_status: 'open' }),
       supabase.rpc('admin_list_chip_wallets', { p_limit: 30 }),
     ])
-    const err = p.error || paid.error || rej.error || m.error || w.error
+    const err = p.error || paid.error || rej.error || w.error
     setError(err ? err.message : '')
     setPending([...(p.data || [])].sort((a, b) => a.id - b.id)) // 오래된 요청부터
     setHistory([...(paid.data || []), ...(rej.data || [])].sort((a, b) => b.id - a.id).slice(0, 20))
-    setMarkets(m.data || [])
     setWallets(w.data || [])
     setLoading(false)
   }, [supabase])
@@ -667,18 +683,6 @@ function ChipsTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
     const note = window.prompt(`#${w.id} 출금 신청을 거절하고 칩 ${fmtN(w.amount)} 를 환불해요.\n거절 사유(선택):`, '')
     if (note === null) return
     const res = await callRpc('admin_handle_withdrawal', { p_id: w.id, p_action: 'rejected', p_note: note || null }, `#${w.id} 거절하고 칩을 환불했습니다.`)
-    if (res.ok) load()
-  }
-
-  const cancelMarket = async (m) => {
-    if (!window.confirm(`경기 #${m.id} 의 모든 베팅(${m.bettors}명)을 취소하고 칩을 환불할까요?`)) return
-    const res = await callRpc('admin_cancel_bet_market', { p_id: m.id }, `경기 #${m.id} 베팅을 환불했습니다.`)
-    if (res.ok) load()
-  }
-
-  const settleMarket = async (m, winner) => {
-    if (!window.confirm(`경기 #${m.id} 를 ${winner} 팀 승리로 정산할까요? (적중자 지급 / 실패자 칩 소멸, 되돌릴 수 없어요)`)) return
-    const res = await callRpc('admin_settle_bet_market', { p_id: m.id, p_winner: winner }, `경기 #${m.id} 를 ${winner} 팀 승리로 정산했습니다.`)
     if (res.ok) load()
   }
 
@@ -739,26 +743,9 @@ function ChipsTab({ supabase, callRpc, busy, teamConfig, isMobile }) {
         ))}
       </div>
 
-      {/* 진행 중 베팅 경기 */}
-      <div style={{ ...card, marginBottom: '12px' }}>
-        <div style={{ fontSize: '14px', fontWeight: '900', color: '#334155', marginBottom: '4px' }}>🎰 진행 중인 베팅 경기 ({markets.length})</div>
-        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>정상적으로는 방장이 결과를 입력하면 자동 정산돼요. 결과 입력이 누락됐을 때만 여기서 직접 정산/취소하세요.</div>
-        {markets.length === 0 ? <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>진행 중인 경기가 없어요.</p> : markets.map((m) => (
-          <div key={m.id} style={{ padding: '8px 0', borderTop: '1px dashed #e2e8f0' }}>
-            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a' }}>#{m.id} · {m.game} · 베팅 {m.bettors}명</div>
-            <div style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 6px', lineHeight: 1.5 }}>
-              🔵 A ({(m.team_a || []).map((x) => x.name).join(', ') || '-'}) ×{m.mult_a} · 총 {fmtN(m.total_a)}칩<br />
-              🔴 B ({(m.team_b || []).map((x) => x.name).join(', ') || '-'}) ×{m.mult_b} · 총 {fmtN(m.total_b)}칩<br />
-              베팅 마감 {fmtTime(m.closes_at)}
-            </div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => settleMarket(m, 'A')} disabled={busy} style={btn('#2563eb')}>A팀 승리 정산</button>
-              <button type="button" onClick={() => settleMarket(m, 'B')} disabled={busy} style={btn('#dc2626')}>B팀 승리 정산</button>
-              <button type="button" onClick={() => cancelMarket(m)} disabled={busy} style={btn('#fff', '#475569', '1px solid #cbd5e1')}>취소(전액 환불)</button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <p style={{ margin: '0 0 12px', fontSize: '11px', color: '#64748b' }}>
+        ℹ️ 디스코드 봇의 내전 베팅 기능은 종료됐어요. 남아 있는 칩 출금 신청과 지갑 정리만 여기서 처리하면 돼요.
+      </p>
 
       {/* 칩 지갑 */}
       <div style={{ ...card, marginBottom: '12px' }}>
