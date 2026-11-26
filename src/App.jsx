@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from './supabaseClient'
 import { 
   Trophy, LogIn, LogOut, Sparkles, MessageSquare, Flame, Send, 
@@ -40,18 +40,29 @@ const getTitleByPoints = (points = 0) => {
   return { name: '🌱 견습 제자', color: '#64748b', bg: '#f1f5f9' }
 }
 
-const getHighestOwMMR = (profile) => {
-  if (!profile) return '언랭크'
-  const roles = [
-    { name: '탱', score: profile.tank_mmr || 0 },
-    { name: '딜', score: profile.deal_mmr || 0 },
-    { name: '힐', score: profile.heal_mmr || 0 },
-  ]
-  roles.sort((a, b) => b.score - a.score)
-  const highest = roles[0]
-  if (!highest || highest.score <= 1000) return '언랭크'
-  return `${highest.name} ${highest.score} pt`
+// 옵치 점수 → 티어 (봇과 같은 기준: 등급 시작점 + 디비전당 100점)
+const OW_RANKS = [['브론즈', 1000], ['실버', 1500], ['골드', 2000], ['플래티넘', 2500], ['다이아', 3000], ['마스터', 3500], ['그랜드마스터', 4000], ['챔피언', 4500]]
+const owTier = (mmr) => {
+  const v = Number(mmr) || 0
+  let [name, base] = OW_RANKS[0]
+  OW_RANKS.forEach(([n, b]) => { if (v >= b) { name = n; base = b } })
+  return `${name} ${5 - Math.min(Math.max(Math.floor((v - base) / 100), 0), 4)}`
 }
+const OW_ROLE_LABEL = { tank: '탱', deal: '딜', heal: '힐' }
+const getOwSummary = (profile) => {
+  const prefs = profile?.ow_prefs
+  const roles = prefs ? ['tank', 'deal', 'heal'].filter((r) => prefs[r] && prefs[r] !== 'no') : []
+  if (roles.length === 0) return '미등록'
+  const best = roles.reduce((a, b) => ((profile[`${b}_mmr`] || 0) > (profile[`${a}_mmr`] || 0) ? b : a))
+  return `${OW_ROLE_LABEL[best]} ${owTier(profile[`${best}_mmr`])}`
+}
+
+// 팀 순위·멤버 칩에 필요한 컬럼만 (전체 * 대신) — 서버를 떠난 사람은 제외
+const PROFILE_LIST_COLUMNS = 'user_id, discord_id, username, avatar_url, team_id, points'
+const WEED_POINTS = 2
+const WEED_LIMIT = 1000
+const WEED_FLUSH_MS = 1500   // 제초 클릭을 모아서 보내는 간격
+const WEED_FLUSH_AT = 10     // 이만큼 쌓이면 바로 보냄
 
 const getMMDD = (dateStr) => {
   if (!dateStr) return ''
@@ -214,7 +225,6 @@ export default function App() {
 
   const [teams, setTeams] = useState([])
   const [allProfiles, setAllProfiles] = useState([])
-  const [userPoints, setUserPoints] = useState(0)
 
   // ⚔️ 오늘 자 종족별 레이드 점수/참여 인원 상태
   const [todayRaidStats, setTodayRaidStats] = useState({})
@@ -251,14 +261,12 @@ export default function App() {
   const [commentsMap, setCommentsMap] = useState({})
   const [commentInputs, setCommentInputs] = useState({})
 
-  const [likedPostIds, setLikedPostIds] = useState(() => {
-    try {
-      const saved = localStorage.getItem('rakko_liked_posts')
-      return saved ? JSON.parse(saved) : []
-    } catch {
-      return []
-    }
-  })
+  const [likedPostIds, setLikedPostIds] = useState([]) // 서버(post_likes)에서 불러옴
+
+  // 🌱 제초 클릭 모아 보내기
+  const weedPending = useRef(0)
+  const weedTimer = useRef(null)
+  const weedBusy = useRef(false)
 
   const [schedules, setSchedules] = useState([])
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -293,7 +301,7 @@ export default function App() {
   }, [isAdmin])
 
   useEffect(() => {
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = getKstToday()
     const savedFortuneDate = localStorage.getItem('rakko_fortune_date')
     const savedFortuneData = localStorage.getItem('rakko_fortune_data')
     if (savedFortuneDate === todayStr && savedFortuneData) {
@@ -313,7 +321,7 @@ export default function App() {
       try {
         const { data: profiles, error } = await supabase
           .from('user_profiles')
-          .select('*')
+          .select('user_id, discord_id, username, avatar_url, team_id')
           .or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
 
         if (error) return
@@ -327,8 +335,6 @@ export default function App() {
               avatar_url: avatarUrl
             }).or(`user_id.eq.${user.id},discord_id.eq.${discordId}`)
           }
-
-          setUserPoints(existingProfile.points || 0)
 
           if (existingProfile.team_id) {
             setPostTeam(existingProfile.team_id)
@@ -344,6 +350,13 @@ export default function App() {
             chat_count: 0
           })
         }
+        // 내가 누른 좋아요 + 오늘 운세 (다른 기기에서 뽑았어도 반영)
+        const [likes, fortune] = await Promise.all([
+          supabase.rpc('site_my_likes'),
+          supabase.rpc('site_claim_fortune', { p_peek: true }),
+        ])
+        if (Array.isArray(likes.data)) setLikedPostIds(likes.data)
+        if (fortune.data?.already) applyFortune(fortune.data)
       } catch (err) {}
     }
 
@@ -398,98 +411,91 @@ export default function App() {
     }
   }
 
-  const executeWeedingRpc = async () => {
-    try {
-      const { data, error } = await supabase.rpc('try_team_weed')
-      if (error) {
-        alert('제초 처리 중 오류가 발생했습니다: ' + error.message)
-        return
-      }
-
-      const result = Array.isArray(data) ? data[0] : data
-
-      if (!result?.allowed) {
-        if (result?.reason === 'limit_reached') {
-          setTeamDailyWeedUsed(1000)
-          alert('⚠️ 오늘 우리 종족의 제초 한도(1,000회)를 모두 채웠습니다! 내일 다시 도전해 주세요.')
-        } else if (result?.reason === 'no_team') {
-          alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.')
-        } else if (result?.reason === 'not_logged_in') {
-          alert('로그인이 필요한 수련입니다!')
-        } else {
-          alert('해당 팀의 점수 데이터를 찾을 수 없습니다.')
-        }
-        return
-      }
-
-      setUserPoints(result.user_points)
-      setTeamDailyWeedUsed(result.used)
-      setMyTeamInfo((prev) => prev ? { ...prev, total_points: result.team_points, weed_count: result.team_weed_count } : prev)
-      // 요청(로그) 수를 줄이기 위해 매 제초마다 목록을 다시 불러오지 않고, 화면 값만 바로 갱신한 뒤 순위는 20초에 한 번만 새로고침
-      setTeams((prev) => prev.map((t) => (t.team_id === result.team ? { ...t, total_points: result.team_points, weed_count: result.team_weed_count } : t)))
-      setAllProfiles((prev) => prev.map((pr) => (pr.user_id === session.user.id ? { ...pr, points: result.user_points } : pr)))
-      if (!rankingRefreshTimer.current) {
-        rankingRefreshTimer.current = setTimeout(() => {
-          rankingRefreshTimer.current = null
-          fetchTeamScores()
-          fetchUserProfiles()
-        }, 20000)
-      }
-    } catch (err) {}
-  }
-
-  const updateUserAndTeamPoints = async (pointsToAdd, isWeeding = false) => {
-    if (!session) return
-
-    if (isWeeding) {
-      await executeWeedingRpc()
-      return
-    }
-
-    try {
-      const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-      const userId = session.user.id
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('team_id, points')
-        .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
-        .maybeSingle()
-
-      if (!profile) return
-
-      const targetTeam = profile.team_id
-      const currentProfPoints = profile.points || 0
-      const newProfPoints = currentProfPoints + pointsToAdd
-
-      await supabase
-        .from('user_profiles')
-        .update({ points: newProfPoints })
-        .or(`user_id.eq.${userId},discord_id.eq.${discordId}`)
-
-      if (targetTeam) {
-        const { data: teamData } = await supabase
-          .from('team_scores')
-          .select('total_points')
-          .eq('team_id', targetTeam)
-          .maybeSingle()
-
-        if (teamData) {
-          const newTeamPoints = (teamData.total_points || 0) + pointsToAdd
-
-          await supabase
-            .from('team_scores')
-            .update({ total_points: newTeamPoints })
-            .eq('team_id', targetTeam)
-
-          setMyTeamInfo((prev) => prev ? { ...prev, total_points: newTeamPoints } : null)
-        }
-      }
-
-      setUserPoints((prev) => prev + pointsToAdd)
+  // 순위표는 20초에 한 번만 새로고침 (요청 수 절감)
+  const scheduleRankingRefresh = () => {
+    if (rankingRefreshTimer.current) return
+    rankingRefreshTimer.current = setTimeout(() => {
+      rankingRefreshTimer.current = null
       fetchTeamScores()
       fetchUserProfiles()
-    } catch (err) {}
+    }, 20000)
+  }
+
+  // 🌱 제초: 클릭은 화면에 바로 반영하고, 서버에는 모아서 한 번에 보낸다 (try_team_weed_batch)
+  const flushWeeds = async () => {
+    if (weedTimer.current) { clearTimeout(weedTimer.current); weedTimer.current = null }
+    if (weedBusy.current || weedPending.current <= 0) return
+    const count = weedPending.current
+    weedPending.current = 0
+    weedBusy.current = true
+    try {
+      const { data, error } = await supabase.rpc('try_team_weed_batch', { p_count: count })
+      const rollback = (n) => {
+        if (n <= 0) return
+        setTeamDailyWeedUsed((u) => Math.max(0, u - n))
+        setMyTeamInfo((prev) => prev ? { ...prev, weed_count: (prev.weed_count || 0) - n, total_points: (prev.total_points || 0) - n * WEED_POINTS } : prev)
+      }
+      if (error || !data) {
+        rollback(count)
+        alert('제초 처리 중 오류가 발생했습니다: ' + (error?.message || '알 수 없는 오류'))
+        return
+      }
+      if (!data.allowed && data.reason !== 'limit_reached') {
+        rollback(count)
+        if (data.reason === 'no_team') alert('소속된 종족(팀)이 없어 제초 수련을 진행할 수 없습니다.')
+        else if (data.reason === 'not_logged_in') alert('로그인이 필요한 수련입니다!')
+        else alert('해당 팀의 점수 데이터를 찾을 수 없습니다.')
+        return
+      }
+      // 서버 값 + 아직 안 보낸 클릭 = 화면 값
+      const extra = weedPending.current
+      setTeamDailyWeedUsed(Math.min(WEED_LIMIT, data.used + extra))
+      setMyTeamInfo((prev) => prev ? { ...prev, total_points: data.team_points + extra * WEED_POINTS, weed_count: data.team_weed_count + extra } : prev)
+      setTeams((prev) => prev.map((t) => (t.team_id === data.team ? { ...t, total_points: data.team_points, weed_count: data.team_weed_count } : t)))
+      if (data.applied < count) {
+        weedPending.current = 0
+        alert('⚠️ 오늘 우리 종족의 제초 한도(1,000회)를 모두 채웠습니다! 내일 다시 도전해 주세요.')
+      }
+      scheduleRankingRefresh()
+    } finally {
+      weedBusy.current = false
+      if (weedPending.current > 0) scheduleWeedFlush()
+    }
+  }
+
+  const scheduleWeedFlush = () => {
+    if (!weedTimer.current) weedTimer.current = setTimeout(flushWeeds, WEED_FLUSH_MS)
+  }
+
+  // 탭을 닫거나 다른 탭으로 갈 때 남은 클릭을 보낸다
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushWeeds() }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', flushWeeds)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', flushWeeds)
+      flushWeeds()
+    }
+  }, [])
+
+  useEffect(() => { if (activeTab !== 'training') flushWeeds() }, [activeTab])
+
+  const applyFortune = (data) => {
+    const base = FORTUNES[data.index] || FORTUNES[FORTUNES.length - 1]
+    const fortune = { ...base, points: data.points ?? base.points }
+    setTodayFortune(fortune)
+    setHasDrawnFortune(true)
+    try {
+      localStorage.setItem('rakko_fortune_date', getKstToday())
+      localStorage.setItem('rakko_fortune_data', JSON.stringify(fortune))
+    } catch (e) {}
+  }
+
+  // 화면 표시용: 내 포인트가 바뀐 뒤 순위/멤버 목록 갱신 (레이드·도박장 공통)
+  const refreshScores = () => {
+    fetchTeamScores()
+    fetchUserProfiles()
   }
 
   const fetchTeamScores = async () => {
@@ -503,7 +509,8 @@ export default function App() {
   const fetchUserProfiles = async () => {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select(PROFILE_LIST_COLUMNS)
+      .eq('in_guild', true)
       .order('points', { ascending: false })
     if (!error && data) setAllProfiles(data)
   }
@@ -600,16 +607,13 @@ export default function App() {
 
   const handleDrawFortune = async () => {
     if (!session) { alert('로그인이 필요한 수련입니다!'); return }
-    const todayStr = new Date().toISOString().slice(0, 10)
     if (hasDrawnFortune) { alert('오늘의 운세는 이미 뽑으셨습니다! 내일 다시 도전해 주세요.'); return }
-
-    const randomFortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)]
-    setTodayFortune(randomFortune)
-    setHasDrawnFortune(true)
-    localStorage.setItem('rakko_fortune_date', todayStr)
-    localStorage.setItem('rakko_fortune_data', JSON.stringify(randomFortune))
-
-    await updateUserAndTeamPoints(randomFortune.points, false)
+    // 등급과 점수는 서버가 정한다 (하루 1회, 다른 기기에서 뽑았으면 그 결과를 보여줌)
+    const { data, error } = await supabase.rpc('site_claim_fortune', {})
+    if (error || !data?.ok) { alert('운세를 뽑지 못했어요: ' + (error?.message || data?.reason || '')); return }
+    applyFortune(data)
+    if (data.already) alert('오늘의 운세는 이미 뽑으셨어요! 결과를 다시 보여드릴게요.')
+    else scheduleRankingRefresh()
   }
 
   const handleStartSubjugation = () => {
@@ -633,15 +637,19 @@ export default function App() {
 
     if (subjugationStatus === 'ready') {
       const reactionTime = Date.now() - monsterStartTime
-      let result = { reactionTime, grade: 'C급 🍃', points: 1 }
-
-      if (reactionTime < 250) result = { reactionTime, grade: 'S급 🗡️', points: 10 }
-      else if (reactionTime < 350) result = { reactionTime, grade: 'A급 ⚔️', points: 5 }
-      else if (reactionTime < 500) result = { reactionTime, grade: 'B급 🛡️', points: 3 }
-
-      setSubjugationResult(result)
       setSubjugationStatus('finished')
-      await updateUserAndTeamPoints(result.points, false)
+      setSubjugationResult({ reactionTime, grade: '판정 중…', points: 0 })
+      // 등급·점수·하루 보상 횟수는 서버가 판정
+      const { data, error } = await supabase.rpc('site_subjugation_reward', { p_ms: reactionTime })
+      if (error || !data?.ok) {
+        setSubjugationResult({ reactionTime, grade: '오류', points: 0, note: error?.message || '잠시 후 다시 시도해 주세요.' })
+        return
+      }
+      const note = data.reason === 'daily_limit' ? '오늘 보상 횟수를 다 써서 점수는 없어요 (연습 모드)'
+        : data.reason === 'too_fast' ? '너무 빨라요! 몬스터가 나온 뒤에 눌러 주세요.'
+        : (data.left !== undefined ? `오늘 남은 보상 횟수 ${data.left}회` : '')
+      setSubjugationResult({ reactionTime, grade: data.grade, points: data.points, note })
+      if (data.points > 0) scheduleRankingRefresh()
     }
   }
 
@@ -650,18 +658,18 @@ export default function App() {
     setSubjugationResult(null)
   }
 
-  const handleWeedingClick = async () => {
+  const handleWeedingClick = () => {
     if (!session) { alert('로그인이 필요한 수련입니다!'); return }
-    if (weedingCooldown) return
-
-    // 팀 소속/하루 한도 검사는 서버 함수(try_team_weed)가 하므로 클릭마다 미리 조회하지 않는다 (API 요청·로그 절감)
-    await executeWeeding()
-  }
-
-  const executeWeeding = async () => {
+    if (weedingCooldown || teamDailyWeedUsed >= WEED_LIMIT) return
     setWeedingCooldown(true)
     setTimeout(() => { setWeedingCooldown(false) }, 200)
-    await updateUserAndTeamPoints(2, true)
+
+    // 화면에는 바로 반영하고, 서버에는 모아서 보낸다 (소속/한도 최종 판정은 서버)
+    weedPending.current += 1
+    setTeamDailyWeedUsed((u) => u + 1)
+    setMyTeamInfo((prev) => prev ? { ...prev, weed_count: (prev.weed_count || 0) + 1, total_points: (prev.total_points || 0) + WEED_POINTS } : prev)
+    if (weedPending.current >= WEED_FLUSH_AT) flushWeeds()
+    else scheduleWeedFlush()
   }
 
   const fetchCommentsForPost = async (postId) => {
@@ -804,18 +812,13 @@ export default function App() {
     else fetchPosts()
   }
 
-  const handleLikePost = async (postId, currentLikes) => {
+  const handleLikePost = async (postId) => {
     if (!session) { alert('로그인이 필요한 기능입니다!'); return }
-
-    const isAlreadyLiked = likedPostIds.includes(postId)
-    const newLikesCount = isAlreadyLiked ? Math.max(0, (currentLikes || 0) - 1) : (currentLikes || 0) + 1
-    const updatedLikedIds = isAlreadyLiked ? likedPostIds.filter((id) => id !== postId) : [...likedPostIds, postId]
-
-    setLikedPostIds(updatedLikedIds)
-    try { localStorage.setItem('rakko_liked_posts', JSON.stringify(updatedLikedIds)) } catch (err) {}
-
-    const { error } = await supabase.from('posts').update({ likes: newLikesCount }).eq('id', postId)
-    if (!error) fetchPosts()
+    // 1인 1회 토글 (서버가 개수를 다시 세서 돌려줌) — 목록 전체를 다시 불러오지 않는다
+    const { data, error } = await supabase.rpc('site_toggle_like', { p_post_id: postId })
+    if (error || !data?.ok) return
+    setLikedPostIds((prev) => (data.liked ? [...new Set([...prev, postId])] : prev.filter((id) => id !== postId)))
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, likes: data.likes } : p)))
   }
 
   const handleDiscordLogin = async () => {
@@ -841,6 +844,11 @@ export default function App() {
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
 
   const currentTeamWeedCount = myTeamInfo?.weed_count || 0
+  const membersByTeam = useMemo(() => {
+    const map = {}
+    allProfiles.forEach((p) => { if (p.team_id) (map[p.team_id] = map[p.team_id] || []).push(p) })
+    return map
+  }, [allProfiles])
   const selectedSchedules = schedules.filter((s) => isScheduleForDate(s, selectedDateStr))
   const kstTodayStr = getKstToday()
 
@@ -1104,7 +1112,7 @@ export default function App() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {teams.map((team, index) => {
-              const teamMembers = allProfiles.filter((profile) => profile.team_id === team.team_id)
+              const teamMembers = membersByTeam[team.team_id] || []
 
               return (
                 <div 
@@ -1202,20 +1210,7 @@ export default function App() {
             session={session}
             teamConfig={TEAM_CONFIG}
             isMobile={isMobile}
-            onChanged={async () => {
-              fetchTeamScores()
-              fetchTodayRaidStats()
-              fetchUserProfiles()
-              if (session) {
-                const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-                const { data } = await supabase
-                  .from('user_profiles')
-                  .select('points')
-                  .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-                  .maybeSingle()
-                if (data) setUserPoints(data.points || 0)
-              }
-            }}
+            onChanged={() => { refreshScores(); fetchTodayRaidStats() }}
           />
 
           <section className="card" style={{ background: 'linear-gradient(135deg, #fffbe3 0%, #fef3c7 100%)', borderColor: '#fde68a', marginBottom: '16px' }}>
@@ -1265,7 +1260,7 @@ export default function App() {
                   <Target color="#dc2626" size={18} /> 🗡️ 오늘의 토벌 수련
                 </h2>
                 <p style={{ margin: 0, color: '#b91c1c', fontSize: '13px' }}>
-                  몬스터가 나타나면 가장 빠르게 클릭하세요! (무제한 다시 도전 가능)
+                  몬스터가 나타나면 가장 빠르게 클릭하세요! (보상은 하루 20회, 이후엔 연습)
                 </p>
               </div>
 
@@ -1320,6 +1315,9 @@ export default function App() {
                     +{subjugationResult.points} pt
                   </span>
                 </div>
+                {subjugationResult.note && (
+                  <div style={{ fontSize: '11px', color: '#b91c1c' }}>{subjugationResult.note}</div>
+                )}
 
                 <button
                   type="button"
@@ -1550,7 +1548,7 @@ export default function App() {
 
                           <button 
                             type="button"
-                            onClick={() => handleLikePost(post.id, post.likes)}
+                            onClick={() => handleLikePost(post.id)}
                             style={{ 
                               border: isLiked ? '1px solid #fecdd3' : '1px solid #e2e8f0', 
                               background: isLiked ? '#fff0f3' : '#f8fafc', 
@@ -1683,19 +1681,7 @@ export default function App() {
             session={session}
             teamConfig={TEAM_CONFIG}
             isMobile={isMobile}
-            onChanged={async () => {
-              fetchTeamScores()
-              fetchUserProfiles()
-              if (session) {
-                const discordId = session.user.user_metadata?.provider_id || session.user.user_metadata?.sub || ''
-                const { data } = await supabase
-                  .from('user_profiles')
-                  .select('points')
-                  .or(`user_id.eq.${session.user.id},discord_id.eq.${discordId}`)
-                  .maybeSingle()
-                if (data) setUserPoints(data.points || 0)
-              }
-            }}
+            onChanged={refreshScores}
           />
         </>
       )}
@@ -1907,18 +1893,11 @@ export default function App() {
                     <Gamepad2 size={13} color="#3b82f6" /> 게임 전적 / 티어
                   </h4>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', textAlign: 'center' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', textAlign: 'center' }}>
                     <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
                       <div style={{ fontSize: '10px', color: '#64748b' }}>오버워치</div>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#0284c7', marginTop: '2px' }}>
-                        {getHighestOwMMR(selectedProfileModal.profile)}
-                      </div>
-                    </div>
-
-                    <div style={{ background: '#fafaf9', padding: '6px 4px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                      <div style={{ fontSize: '10px', color: '#64748b' }}>롤</div>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#059669', marginTop: '2px' }}>
-                        {selectedProfileModal.profile?.lol_tier || '미등록'}
+                        {getOwSummary(selectedProfileModal.profile)}
                       </div>
                     </div>
 
