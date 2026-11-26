@@ -89,10 +89,18 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     }
   }, [supabase])
 
-  const refreshSoon = useCallback(() => {
+  // 여러 이벤트를 한 번의 새로고침으로 묶는다 (이미 예약돼 있으면 더 이른 쪽만 남김)
+  // 다른 사람 공격마다 무거운 raid_get_state 를 부르지 않도록, 화면 갱신은 실시간 데이터로 하고
+  // 순위/종족 피해 같은 집계만 몇 초에 한 번 다시 불러온다.
+  const refreshAt = useRef(0)
+  const refreshSoon = useCallback((ms = 1200) => {
+    const at = Date.now() + ms
+    if (refreshTimer.current && refreshAt.current <= at) return
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
-    refreshTimer.current = setTimeout(() => { loadState() }, 1200)
+    refreshAt.current = at
+    refreshTimer.current = setTimeout(() => { refreshTimer.current = null; loadState() }, ms)
   }, [loadState])
+  const lastFocusLoad = useRef(0)
 
   // ---------------- 연출 (공통: 다른 유저 포함 데미지 숫자/이펙트) ----------------
   const spawnHit = useCallback((damage, crit, mine) => {
@@ -145,7 +153,11 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
     if (!session) return undefined
     loadState()
 
-    const onFocus = () => loadState()
+    const onFocus = () => {  // 창을 오갈 때마다 부르지 않게 10초 간격 제한
+      if (Date.now() - lastFocusLoad.current < 10000) return
+      lastFocusLoad.current = Date.now()
+      loadState()
+    }
     window.addEventListener('focus', onFocus)
 
     const channel = supabase
@@ -165,7 +177,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
             ...(prev.recent || []),
           ].slice(0, 15),
         }))
-        refreshSoon()
+        refreshSoon(8000)
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'raid_days' }, (payload) => {
         const row = payload.new
@@ -447,7 +459,7 @@ export default function RaidGame({ supabase, session, teamConfig = {}, isMobile,
       setMessage(msg)
 
       if (data.defeated) { spawnDefeat(); if (onChanged) onChanged() }
-      refreshSoon()
+      refreshSoon(data.defeated ? 1200 : 4000)
     } finally {
       setBusy(false)
     }
