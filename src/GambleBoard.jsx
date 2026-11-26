@@ -85,9 +85,14 @@ export default function GambleBoard({ supabase, session, teamConfig = {}, isMobi
     setState(data)
   }, [supabase])
 
-  const refreshSoon = useCallback(() => {
+  // 여러 이벤트를 한 번의 새로고침으로 묶는다 (이미 예약돼 있으면 더 이른 쪽만 남김)
+  const refreshAt = useRef(0)
+  const refreshSoon = useCallback((ms = 1500) => {
+    const at = Date.now() + ms
+    if (refreshTimer.current && refreshAt.current <= at) return
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
-    refreshTimer.current = setTimeout(() => { loadState() }, 1500)
+    refreshAt.current = at
+    refreshTimer.current = setTimeout(() => { refreshTimer.current = null; loadState() }, ms)
   }, [loadState])
 
   // 부모(사이트)의 포인트/종족 점수 갱신은 10초에 한 번만 (요청 수 절감)
@@ -115,8 +120,13 @@ export default function GambleBoard({ supabase, session, teamConfig = {}, isMobi
     if (!session) return undefined
     const channel = supabase
       .channel('gamble-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gamble_rooms' }, () => refreshSoon())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gamble_log' }, () => refreshSoon())
+      // 방 목록은 바로 맞춰야 하니 짧게, 다른 사람 도박 기록은 화면에 바로 붙이고 집계(도박왕 등)만 천천히
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gamble_rooms' }, () => refreshSoon(1500))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gamble_log' }, (payload) => {
+        const row = payload.new
+        setState((prev) => prev && ({ ...prev, recent: [row, ...(prev.recent || []).filter((l) => l.id !== row.id)].slice(0, 30) }))
+        refreshSoon(15000)
+      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [session, supabase, refreshSoon])
